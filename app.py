@@ -19,22 +19,22 @@ def lade_einzelne_sitemap(xml_url):
     except requests.exceptions.RequestException as e:
         st.error(f"Fehler beim Herunterladen der XML-Datei: {e}")
         return pd.DataFrame()
-    
+
     try:
         root = ET.fromstring(xml_content)
     except ET.ParseError as e:
         st.error(f"Fehler beim Parsen der XML-Datei: {e}")
         return pd.DataFrame()
-    
+
     namespaces = {
         'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9',
         'news': 'http://www.google.com/schemas/sitemap-news/0.9',
         'image': 'http://www.google.com/schemas/sitemap-image/1.1',
         'video': 'http://www.google.com/schemas/sitemap-video/1.1',
     }
-    
+
     ergebnisse = []
-    
+
     for url in root.findall('ns:url', namespaces):
         loc_element = url.find('ns:loc', namespaces)
         if loc_element is not None:
@@ -68,12 +68,18 @@ def lade_einzelne_sitemap(xml_url):
                 pub_date = news_element.find('news:publication_date', namespaces)
                 title = news_element.find('news:title', namespaces)
                 keywords = news_element.find('news:keywords', namespaces)
-                if pub_date is not None:
+                if pub_date is not None and pub_date.text:
                     daten['publication_date'] = pub_date.text
+                else:
+                    # Setzen eines Standarddatums oder Überspringen des Artikels
+                    daten['publication_date'] = None  # oder pd.Timestamp.now().isoformat()
                 if title is not None:
                     daten['title'] = title.text
                 if keywords is not None:
                     daten['keywords'] = keywords.text
+            else:
+                # Falls 'news:news' Element fehlt, setzen wir 'publication_date' auf None
+                daten['publication_date'] = None
             image_element = url.find('image:image', namespaces)
             if image_element is not None:
                 image_loc = image_element.find('image:loc', namespaces)
@@ -83,7 +89,7 @@ def lade_einzelne_sitemap(xml_url):
                 if caption is not None:
                     daten['image_caption'] = caption.text
             ergebnisse.append(daten)
-    
+
     df = pd.DataFrame(ergebnisse)
     return df
 
@@ -124,14 +130,23 @@ def main():
     # Veröffentlichungsdatum in datetime umwandeln
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
 
+    # Entfernen von Zeilen ohne gültiges Veröffentlichungsdatum
+    df = df.dropna(subset=['publication_date'])
+
+    # Überprüfen, ob 'publication_date' jetzt datetime ist
+    if df['publication_date'].dtype == 'datetime64[ns]':
+        st.success("Veröffentlichungsdatum erfolgreich in datetime umgewandelt.")
+    else:
+        st.error("Fehler bei der Umwandlung von 'publication_date' in datetime.")
+        st.stop()
+
     # Neue Spalte 'time_slot' hinzufügen
-    if not df.empty and df['publication_date'].notnull().any():
-        df['hour'] = df['publication_date'].dt.hour
-        bins = [0, 8, 12, 18, 24]
-        labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
-        df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
-        # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
-        df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
+    df['hour'] = df['publication_date'].dt.hour
+    bins = [0, 8, 12, 18, 24]
+    labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
+    df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+    # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
+    df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
 
     # Quelle hinzufügen
     df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
