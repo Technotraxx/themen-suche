@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 import requests
 import pandas as pd
 import streamlit as st
-from urllib.parse import urlparse, quote_plus
+from urllib.parse import urlparse
 import re
 import altair as alt
 
@@ -211,8 +211,8 @@ def main():
         # Jina.ai Reader Integration
         with st.expander("Artikel mit Jina.ai Reader anzeigen"):
             if st.button("Artikel abrufen"):
-                encoded_url = quote_plus(article['loc'])
-                reader_url = f"https://r.jina.ai/{encoded_url}"
+                # Verwenden der Artikel-URL direkt ohne Encoding
+                reader_url = f"https://r.jina.ai/{article['loc']}"
                 try:
                     reader_response = requests.get(reader_url)
                     reader_response.raise_for_status()
