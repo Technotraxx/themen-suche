@@ -140,31 +140,31 @@ def main():
     # Convert 'publication_date' to datetime
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
 
-    # Überprüfen der Daten nach dem Laden
-    st.write("Anzahl der Artikel vor Datumskonvertierung:", len(df))
-    st.write("Erste Zeilen von df:")
-    st.write(df.head())
+    # Comment out debug information
+    # st.write("Anzahl der Artikel vor Datumskonvertierung:", len(df))
+    # st.write("Erste Zeilen von df:")
+    # st.write(df.head())
 
     # Überprüfen, ob 'publication_date' vorhanden ist
-    if 'publication_date' in df.columns:
-        st.write("Spalte 'publication_date' ist vorhanden.")
-        st.write("Inhalt von 'publication_date' nach Konvertierung:")
-        st.write(df['publication_date'].head(20))
-    else:
+    if 'publication_date' not in df.columns:
         st.error("Spalte 'publication_date' ist nicht vorhanden.")
         st.stop()
 
-    # Anzahl der gültigen und ungültigen Datumswerte
-    st.write("Anzahl der gültigen 'publication_date' nach Konvertierung:", df['publication_date'].notnull().sum())
-    st.write("Anzahl der ungültigen 'publication_date' nach Konvertierung:", df['publication_date'].isnull().sum())
+    # Comment out more debug information
+    # st.write("Spalte 'publication_date' ist vorhanden.")
+    # st.write("Inhalt von 'publication_date' nach Konvertierung:")
+    # st.write(df['publication_date'].head(20))
+    # st.write("Anzahl der gültigen 'publication_date' nach Konvertierung:", df['publication_date'].notnull().sum())
+    # st.write("Anzahl der ungültigen 'publication_date' nach Konvertierung:", df['publication_date'].isnull().sum())
 
     # Entfernen von Zeilen ohne gültiges Veröffentlichungsdatum
     df = df.dropna(subset=['publication_date'])
 
-    # Überprüfen, ob 'publication_date' jetzt datetime ist
-    st.write("Datentyp von 'publication_date' nach Konvertierung:", df['publication_date'].dtype)
+    # Comment out datetime check
+    # st.write("Datentyp von 'publication_date' nach Konvertierung:", df['publication_date'].dtype)
     if pd.api.types.is_datetime64_any_dtype(df['publication_date']):
-        st.success("Veröffentlichungsdatum erfolgreich in datetime umgewandelt.")
+        # st.success("Veröffentlichungsdatum erfolgreich in datetime umgewandelt.")
+        pass
     else:
         st.error("Fehler bei der Umwandlung von 'publication_date' in datetime.")
         st.stop()
