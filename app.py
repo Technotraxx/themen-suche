@@ -8,9 +8,8 @@ import re
 # Bibliothek der verfügbaren Sitemaps und Domains
 SITEMAP_LIBRARY = {
     'Stern.de News Sitemap': 'https://www.stern.de/736974656d6170-news.xml',
-    'Welt.de News Sitemap': 'https://www.welt.de/sitemaps/newssitemap/newssitemap.xml',
-    'Spiegel.de News Sitemap': 'https://www.spiegel.de/sitemaps/news-de.xml',
-    'Focus.de Politik News Sitemap': 'https://www.focus.de/sitemap_news_politik.xml'
+    'Stern.de Video Sitemap': 'https://www.stern.de/736974656d6170-video.xml',
+    'Welt.de Sitemap': 'https://www.welt.de/sitemaps/welt/sitemap.xml',
     # Fügen Sie hier weitere Sitemaps hinzu
 }
 
@@ -184,6 +183,7 @@ def main():
     # Visualisierung
     st.subheader("Artikelverteilung nach Zeitslots")
     if not df.empty and 'time_slot' in df.columns:
+        # Verwenden von groupby und size(), um die Reihenfolge der Zeitslots zu erhalten
         artikel_pro_slot = df.groupby('time_slot').size().reindex(labels, fill_value=0)
         st.bar_chart(artikel_pro_slot)
     else:
@@ -206,3 +206,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
