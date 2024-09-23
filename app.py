@@ -101,6 +101,10 @@ def lade_einzelne_sitemap(xml_url):
             ergebnisse.append(daten)
 
     df = pd.DataFrame(ergebnisse)
+    
+    # Convert 'publication_date' to UTC-aware datetime
+    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
+    
     return df
 
 # Funktion zum Laden mehrerer Sitemaps
@@ -151,9 +155,6 @@ def main():
         st.error("Spalte 'publication_date' ist nicht vorhanden.")
         st.stop()
 
-    # Veröffentlichungsdatum in datetime umwandeln
-    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
-
     # Anzahl der gültigen und ungültigen Datumswerte
     st.write("Anzahl der gültigen 'publication_date' nach Konvertierung:", df['publication_date'].notnull().sum())
     st.write("Anzahl der ungültigen 'publication_date' nach Konvertierung:", df['publication_date'].isnull().sum())
@@ -163,20 +164,22 @@ def main():
 
     # Überprüfen, ob 'publication_date' jetzt datetime ist
     st.write("Datentyp von 'publication_date' nach Konvertierung:", df['publication_date'].dtype)
-    if df['publication_date'].dtype == 'datetime64[ns]':
+    if pd.api.types.is_datetime64_any_dtype(df['publication_date']):
         st.success("Veröffentlichungsdatum erfolgreich in datetime umgewandelt.")
     else:
         st.error("Fehler bei der Umwandlung von 'publication_date' in datetime.")
         st.stop()
 
+    # Convert UTC to local time and remove timezone information
+    df['publication_date'] = df['publication_date'].dt.tz_convert('Europe/Berlin').dt.tz_localize(None)
+
     # Neue Spalte 'time_slot' hinzufügen
-    if not df.empty and df['publication_date'].notnull().any():
-        df['hour'] = df['publication_date'].dt.hour
-        bins = [0, 8, 12, 18, 24]
-        labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
-        df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
-        # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
-        df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
+    df['hour'] = df['publication_date'].dt.hour
+    bins = [0, 8, 12, 18, 24]
+    labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
+    df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+    # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
+    df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
 
     # Quelle hinzufügen
     df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
