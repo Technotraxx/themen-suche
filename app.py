@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 from urllib.parse import urlparse
 import re
+import altair as alt
 
 # Bibliothek der verfügbaren Sitemaps und Domains
 SITEMAP_LIBRARY = {
