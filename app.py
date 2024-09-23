@@ -3,6 +3,14 @@ import requests
 import pandas as pd
 import streamlit as st
 
+# Bibliothek der verfügbaren Sitemaps und Domains
+SITEMAP_LIBRARY = {
+    'Stern.de News Sitemap': 'https://www.stern.de/736974656d6170-news.xml',
+    'Stern.de Video Sitemap': 'https://www.stern.de/736974656d6170-video.xml',
+    'Beispiel Sitemap': 'https://www.beispiel.de/sitemap.xml',
+    # Fügen Sie hier weitere Sitemaps hinzu
+}
+
 # Funktion zum Herunterladen und Parsen der XML-Datei
 @st.cache_data
 def lade_daten(xml_url):
@@ -69,9 +77,12 @@ def lade_daten(xml_url):
 
 # Hauptprogramm
 def main():
-    st.title("Politik-Artikel aus der XML-Datei")
+    st.title("Politik-Artikel aus verschiedenen Sitemaps")
     
-    xml_url = 'https://www.stern.de/736974656d6170-news.xml'
+    # Auswahl der Sitemap
+    st.sidebar.header("Sitemap-Auswahl")
+    sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", list(SITEMAP_LIBRARY.keys()))
+    xml_url = SITEMAP_LIBRARY[sitemap_choice]
     
     df = lade_daten(xml_url)
     
@@ -80,19 +91,20 @@ def main():
         return
     
     # Veröffentlichungsdatum in datetime umwandeln
-    df['publication_date'] = pd.to_datetime(df['publication_date'])
+    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
     
     # Filteroptionen im Sidebar
     st.sidebar.header("Filteroptionen")
     
     # Nach Datum filtern
-    start_date = df['publication_date'].min().date()
-    end_date = df['publication_date'].max().date()
-    selected_dates = st.sidebar.date_input("Veröffentlichungsdatum", [start_date, end_date])
-    
-    if len(selected_dates) == 2:
-        start_date, end_date = selected_dates
-        df = df[(df['publication_date'].dt.date >= start_date) & (df['publication_date'].dt.date <= end_date)]
+    if df['publication_date'].notnull().any():
+        start_date = df['publication_date'].min().date()
+        end_date = df['publication_date'].max().date()
+        selected_dates = st.sidebar.date_input("Veröffentlichungsdatum", [start_date, end_date])
+        
+        if len(selected_dates) == 2:
+            start_date, end_date = selected_dates
+            df = df[(df['publication_date'].dt.date >= start_date) & (df['publication_date'].dt.date <= end_date)]
     
     # Nach Keyword filtern
     keyword = st.sidebar.text_input("Nach Keyword filtern")
@@ -100,7 +112,7 @@ def main():
         df = df[df['keywords'].str.contains(keyword, case=False, na=False)]
     
     # Datenanzeige
-    st.subheader("Gefundene Artikel")
+    st.subheader(f"Gefundene Artikel in {sitemap_choice}")
     st.write(f"Anzahl der Artikel: {len(df)}")
     st.dataframe(df[['publication_date', 'title', 'keywords', 'loc']])
     
@@ -123,19 +135,25 @@ def main():
     
     # Visualisierung
     st.subheader("Artikel nach Datum")
-    artikel_pro_tag = df['publication_date'].dt.date.value_counts().sort_index()
-    st.bar_chart(artikel_pro_tag)
+    if df['publication_date'].notnull().any():
+        artikel_pro_tag = df['publication_date'].dt.date.value_counts().sort_index()
+        st.bar_chart(artikel_pro_tag)
+    else:
+        st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
     
     # Einzelne Artikel anzeigen
     st.subheader("Artikel Details")
-    selected_article = st.selectbox("Artikel auswählen", df['title'])
-    article = df[df['title'] == selected_article].iloc[0]
-    st.write("**Titel:**", article['title'])
-    st.write("**Veröffentlichungsdatum:**", article['publication_date'])
-    st.write("**Keywords:**", article['keywords'])
-    st.write("**URL:**", article['loc'])
-    if pd.notna(article.get('image_loc', None)):
-        st.image(article['image_loc'], caption=article.get('image_caption', ''))
-    
+    if not df.empty:
+        selected_article = st.selectbox("Artikel auswählen", df['title'])
+        article = df[df['title'] == selected_article].iloc[0]
+        st.write("**Titel:**", article['title'])
+        st.write("**Veröffentlichungsdatum:**", article['publication_date'])
+        st.write("**Keywords:**", article['keywords'])
+        st.write("**URL:**", article['loc'])
+        if pd.notna(article.get('image_loc', None)):
+            st.image(article['image_loc'], caption=article.get('image_caption', ''))
+    else:
+        st.write("Keine Artikel zum Anzeigen verfügbar.")
+
 if __name__ == "__main__":
     main()
