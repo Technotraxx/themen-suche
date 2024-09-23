@@ -101,10 +101,6 @@ def lade_einzelne_sitemap(xml_url):
             ergebnisse.append(daten)
 
     df = pd.DataFrame(ergebnisse)
-    
-    # Convert 'publication_date' to UTC-aware datetime
-    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
-    
     return df
 
 # Funktion zum Laden mehrerer Sitemaps
@@ -141,6 +137,9 @@ def main():
         st.warning("Keine Daten verfügbar.")
         return
 
+    # Convert 'publication_date' to datetime
+    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
+
     # Überprüfen der Daten nach dem Laden
     st.write("Anzahl der Artikel vor Datumskonvertierung:", len(df))
     st.write("Erste Zeilen von df:")
@@ -149,7 +148,7 @@ def main():
     # Überprüfen, ob 'publication_date' vorhanden ist
     if 'publication_date' in df.columns:
         st.write("Spalte 'publication_date' ist vorhanden.")
-        st.write("Inhalt von 'publication_date' vor Konvertierung:")
+        st.write("Inhalt von 'publication_date' nach Konvertierung:")
         st.write(df['publication_date'].head(20))
     else:
         st.error("Spalte 'publication_date' ist nicht vorhanden.")
