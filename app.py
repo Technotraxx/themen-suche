@@ -118,6 +118,13 @@ def main():
     # Veröffentlichungsdatum in datetime umwandeln
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
     
+    # Neue Spalte 'time_slot' hinzufügen
+    if not df.empty and df['publication_date'].notnull().any():
+        df['hour'] = df['publication_date'].dt.hour
+        bins = [0, 8, 12, 18, 24]
+        labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
+        df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+    
     # Verfügbare Rubriken ermitteln
     rubriken = df['rubrik'].dropna().unique()
     rubriken.sort()
@@ -175,10 +182,10 @@ def main():
             st.warning("Keine Daten zum Exportieren verfügbar.")
     
     # Visualisierung
-    st.subheader("Artikel nach Datum")
-    if not df.empty and df['publication_date'].notnull().any():
-        artikel_pro_tag = df['publication_date'].dt.date.value_counts().sort_index()
-        st.bar_chart(artikel_pro_tag)
+    st.subheader("Artikelverteilung nach Zeitslots")
+    if not df.empty and 'time_slot' in df.columns:
+        artikel_pro_slot = df['time_slot'].value_counts().reindex(labels).fillna(0)
+        st.bar_chart(artikel_pro_slot)
     else:
         st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
     
