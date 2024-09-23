@@ -124,6 +124,8 @@ def main():
         bins = [0, 8, 12, 18, 24]
         labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
         df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+        # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
+        df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
     
     # Verfügbare Rubriken ermitteln
     rubriken = df['rubrik'].dropna().unique()
@@ -184,9 +186,18 @@ def main():
     # Visualisierung
     st.subheader("Artikelverteilung nach Zeitslots")
     if not df.empty and 'time_slot' in df.columns:
-        # Verwenden von groupby und size(), um die Reihenfolge der Zeitslots zu erhalten
-        artikel_pro_slot = df.groupby('time_slot').size().reindex(labels, fill_value=0)
-        st.bar_chart(artikel_pro_slot)
+        # Gruppieren der Daten
+        artikel_pro_slot = df.groupby('time_slot').size().reset_index(name='Anzahl')
+        
+        # Erstellung des Balkendiagramms mit Altair
+        chart = alt.Chart(artikel_pro_slot).mark_bar().encode(
+            x=alt.X('time_slot:N', sort=labels, title='Zeitslot'),
+            y=alt.Y('Anzahl:Q', title='Anzahl der Artikel')
+        ).properties(
+            width=600,
+            height=400
+        )
+        st.altair_chart(chart)
     else:
         st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
     
@@ -207,4 +218,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
