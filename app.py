@@ -2,26 +2,13 @@ import xml.etree.ElementTree as ET
 import requests
 import pandas as pd
 import streamlit as st
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 import re
 import altair as alt
 
-# Bibliothek der verfügbaren Sitemaps und Domains
-SITEMAP_LIBRARY = {
-    'Stern.de News Sitemap': 'https://www.stern.de/736974656d6170-news.xml',
-    'Welt.de News Sitemap': 'https://www.welt.de/sitemaps/newssitemap/newssitemap.xml',
-    'Spiegel.de News Sitemap': 'https://www.spiegel.de/sitemaps/news-de.xml',
-    'Focus.de Politik News Sitemap': 'https://www.focus.de/sitemap_news_politik.xml'
-    # Fügen Sie hier weitere Sitemaps hinzu
-}
-
-# Liste bekannter Kategorien (kann erweitert werden)
-BEKANNTE_KATEGORIEN = [
-    'politik', 'wirtschaft', 'kultur', 'sport', 'finanzen', 'gesellschaft',
-    'wissen', 'gesundheit', 'technik', 'auto', 'reisen', 'digital', 'panorama',
-    'wissenschaft', 'regional', 'meinung', 'video', 'bilder', 'leben', 'stil',
-    # Fügen Sie hier weitere bekannte Kategorien hinzu
-]
+# Importieren der Sitemaps und Kategorien aus den separaten Dateien
+from sitemaps import SITEMAP_LIBRARY
+from kategorien import BEKANNTE_KATEGORIEN
 
 # Funktion zum Herunterladen und Parsen der XML-Datei
 @st.cache_data
