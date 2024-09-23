@@ -184,7 +184,7 @@ def main():
     # Visualisierung
     st.subheader("Artikelverteilung nach Zeitslots")
     if not df.empty and 'time_slot' in df.columns:
-        artikel_pro_slot = df['time_slot'].value_counts().reindex(labels).fillna(0)
+        artikel_pro_slot = df.groupby('time_slot').size().reindex(labels, fill_value=0)
         st.bar_chart(artikel_pro_slot)
     else:
         st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
