@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import streamlit as st
 from urllib.parse import urlparse
+import re
 
 # Bibliothek der verfügbaren Sitemaps und Domains
 SITEMAP_LIBRARY = {
@@ -12,6 +13,14 @@ SITEMAP_LIBRARY = {
     'Focus.de Politik News Sitemap': 'https://www.focus.de/sitemap_news_politik.xml'
     # Fügen Sie hier weitere Sitemaps hinzu
 }
+
+# Liste bekannter Kategorien (kann erweitert werden)
+BEKANNTE_KATEGORIEN = [
+    'politik', 'wirtschaft', 'kultur', 'sport', 'finanzen', 'gesellschaft',
+    'wissen', 'gesundheit', 'technik', 'auto', 'reisen', 'digital', 'panorama',
+    'wissenschaft', 'regional', 'meinung', 'video', 'bilder', 'leben', 'stil',
+    # Fügen Sie hier weitere bekannte Kategorien hinzu
+]
 
 # Funktion zum Herunterladen und Parsen der XML-Datei
 @st.cache_data
@@ -46,10 +55,18 @@ def lade_daten(xml_url):
             # Rubrik aus der URL extrahieren
             parsed_url = urlparse(loc)
             path_parts = parsed_url.path.strip('/').split('/')
-            if len(path_parts) >= 1:
-                rubrik = '/'.join(path_parts[:2])  # Anpassbar je nach gewünschter Tiefe
-            else:
-                rubrik = 'Unbekannt'
+            rubrik = 'Unbekannt'
+
+            # Kategorien erkennen
+            for part in path_parts:
+                if part.lower() in BEKANNTE_KATEGORIEN:
+                    rubrik = part.lower()
+                    break  # Erste gefundene Kategorie verwenden
+
+            # Falls keine bekannte Kategorie gefunden wurde, erstes Pfadsegment verwenden
+            if rubrik == 'Unbekannt' and len(path_parts) >= 1:
+                rubrik = path_parts[0].lower()
+
             daten = {'loc': loc, 'rubrik': rubrik}
             news_element = url.find('news:news', namespaces)
             if news_element is not None:
@@ -108,12 +125,17 @@ def main():
     # Filteroptionen im Sidebar
     st.sidebar.header("Filteroptionen")
     
-    # Rubrikenauswahl
-    selected_rubriken = st.sidebar.multiselect("Rubrik auswählen", rubriken, default=rubriken)
-    df = df[df['rubrik'].isin(selected_rubriken)]
+    # Rubrikenauswahl - Standardmäßig keine Rubriken ausgewählt
+    selected_rubriken = st.sidebar.multiselect("Rubrik auswählen", rubriken, default=[])
+    if selected_rubriken:
+        df = df[df['rubrik'].isin(selected_rubriken)]
+    else:
+        # Wenn keine Rubriken ausgewählt sind, leeren DataFrame setzen
+        df = df.iloc[0:0]
+        st.info("Bitte wählen Sie mindestens eine Rubrik aus, um die Artikel anzuzeigen.")
     
     # Nach Datum filtern
-    if df['publication_date'].notnull().any():
+    if not df.empty and df['publication_date'].notnull().any():
         start_date = df['publication_date'].min().date()
         end_date = df['publication_date'].max().date()
         selected_dates = st.sidebar.date_input("Veröffentlichungsdatum", [start_date, end_date])
@@ -124,7 +146,7 @@ def main():
     
     # Nach Keyword filtern
     keyword = st.sidebar.text_input("Nach Keyword filtern")
-    if keyword:
+    if keyword and not df.empty:
         df = df[df['keywords'].str.contains(keyword, case=False, na=False)]
     
     # Datenanzeige
@@ -137,21 +159,24 @@ def main():
     export_format = st.selectbox("Exportformat wählen", ["CSV", "Excel", "JSON"])
     
     if st.button("Daten exportieren"):
-        if export_format == "CSV":
-            csv = df.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button(label="CSV herunterladen", data=csv, file_name='artikel.csv', mime='text/csv')
-        elif export_format == "Excel":
-            excel_buffer = pd.ExcelWriter('artikel.xlsx', engine='xlsxwriter')
-            df.to_excel(excel_buffer, index=False)
-            excel_buffer.save()
-            st.download_button(label="Excel herunterladen", data=open('artikel.xlsx', 'rb'), file_name='artikel.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        elif export_format == "JSON":
-            json_data = df.to_json(orient='records', force_ascii=False)
-            st.download_button(label="JSON herunterladen", data=json_data, file_name='artikel.json', mime='application/json')
+        if not df.empty:
+            if export_format == "CSV":
+                csv = df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(label="CSV herunterladen", data=csv, file_name='artikel.csv', mime='text/csv')
+            elif export_format == "Excel":
+                excel_buffer = pd.ExcelWriter('artikel.xlsx', engine='xlsxwriter')
+                df.to_excel(excel_buffer, index=False)
+                excel_buffer.save()
+                st.download_button(label="Excel herunterladen", data=open('artikel.xlsx', 'rb'), file_name='artikel.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            elif export_format == "JSON":
+                json_data = df.to_json(orient='records', force_ascii=False)
+                st.download_button(label="JSON herunterladen", data=json_data, file_name='artikel.json', mime='application/json')
+        else:
+            st.warning("Keine Daten zum Exportieren verfügbar.")
     
     # Visualisierung
     st.subheader("Artikel nach Datum")
-    if df['publication_date'].notnull().any():
+    if not df.empty and df['publication_date'].notnull().any():
         artikel_pro_tag = df['publication_date'].dt.date.value_counts().sort_index()
         st.bar_chart(artikel_pro_tag)
     else:
