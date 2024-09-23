@@ -2,12 +2,12 @@ import xml.etree.ElementTree as ET
 import requests
 import pandas as pd
 import streamlit as st
+from urllib.parse import urlparse
 
 # Bibliothek der verfügbaren Sitemaps und Domains
 SITEMAP_LIBRARY = {
     'Stern.de News Sitemap': 'https://www.stern.de/736974656d6170-news.xml',
     'Stern.de Video Sitemap': 'https://www.stern.de/736974656d6170-video.xml',
-    'Beispiel Sitemap': 'https://www.beispiel.de/sitemap.xml',
     # Fügen Sie hier weitere Sitemaps hinzu
 }
 
@@ -41,43 +41,49 @@ def lade_daten(xml_url):
         loc_element = url.find('ns:loc', namespaces)
         if loc_element is not None:
             loc = loc_element.text
-            if '/politik/' in loc:
-                daten = {'loc': loc}
-                news_element = url.find('news:news', namespaces)
-                if news_element is not None:
-                    publication = news_element.find('news:publication', namespaces)
-                    if publication is not None:
-                        name = publication.find('news:name', namespaces)
-                        language = publication.find('news:language', namespaces)
-                        if name is not None:
-                            daten['name'] = name.text
-                        if language is not None:
-                            daten['language'] = language.text
-                    pub_date = news_element.find('news:publication_date', namespaces)
-                    title = news_element.find('news:title', namespaces)
-                    keywords = news_element.find('news:keywords', namespaces)
-                    if pub_date is not None:
-                        daten['publication_date'] = pub_date.text
-                    if title is not None:
-                        daten['title'] = title.text
-                    if keywords is not None:
-                        daten['keywords'] = keywords.text
-                image_element = url.find('image:image', namespaces)
-                if image_element is not None:
-                    image_loc = image_element.find('image:loc', namespaces)
-                    caption = image_element.find('image:caption', namespaces)
-                    if image_loc is not None:
-                        daten['image_loc'] = image_loc.text
-                    if caption is not None:
-                        daten['image_caption'] = caption.text
-                ergebnisse.append(daten)
+            # Rubrik aus der URL extrahieren
+            parsed_url = urlparse(loc)
+            path_parts = parsed_url.path.strip('/').split('/')
+            if len(path_parts) >= 1:
+                rubrik = '/'.join(path_parts[:2])  # Anpassbar je nach gewünschter Tiefe
+            else:
+                rubrik = 'Unbekannt'
+            daten = {'loc': loc, 'rubrik': rubrik}
+            news_element = url.find('news:news', namespaces)
+            if news_element is not None:
+                publication = news_element.find('news:publication', namespaces)
+                if publication is not None:
+                    name = publication.find('news:name', namespaces)
+                    language = publication.find('news:language', namespaces)
+                    if name is not None:
+                        daten['name'] = name.text
+                    if language is not None:
+                        daten['language'] = language.text
+                pub_date = news_element.find('news:publication_date', namespaces)
+                title = news_element.find('news:title', namespaces)
+                keywords = news_element.find('news:keywords', namespaces)
+                if pub_date is not None:
+                    daten['publication_date'] = pub_date.text
+                if title is not None:
+                    daten['title'] = title.text
+                if keywords is not None:
+                    daten['keywords'] = keywords.text
+            image_element = url.find('image:image', namespaces)
+            if image_element is not None:
+                image_loc = image_element.find('image:loc', namespaces)
+                caption = image_element.find('image:caption', namespaces)
+                if image_loc is not None:
+                    daten['image_loc'] = image_loc.text
+                if caption is not None:
+                    daten['image_caption'] = caption.text
+            ergebnisse.append(daten)
     
     df = pd.DataFrame(ergebnisse)
     return df
 
 # Hauptprogramm
 def main():
-    st.title("Politik-Artikel aus verschiedenen Sitemaps")
+    st.title("Artikel aus verschiedenen Rubriken")
     
     # Auswahl der Sitemap
     st.sidebar.header("Sitemap-Auswahl")
@@ -93,8 +99,16 @@ def main():
     # Veröffentlichungsdatum in datetime umwandeln
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
     
+    # Verfügbare Rubriken ermitteln
+    rubriken = df['rubrik'].dropna().unique()
+    rubriken.sort()
+    
     # Filteroptionen im Sidebar
     st.sidebar.header("Filteroptionen")
+    
+    # Rubrikenauswahl
+    selected_rubriken = st.sidebar.multiselect("Rubrik auswählen", rubriken, default=rubriken)
+    df = df[df['rubrik'].isin(selected_rubriken)]
     
     # Nach Datum filtern
     if df['publication_date'].notnull().any():
@@ -114,7 +128,7 @@ def main():
     # Datenanzeige
     st.subheader(f"Gefundene Artikel in {sitemap_choice}")
     st.write(f"Anzahl der Artikel: {len(df)}")
-    st.dataframe(df[['publication_date', 'title', 'keywords', 'loc']])
+    st.dataframe(df[['publication_date', 'title', 'rubrik', 'keywords', 'loc']])
     
     # Download-Optionen
     st.subheader("Daten exportieren")
@@ -123,15 +137,15 @@ def main():
     if st.button("Daten exportieren"):
         if export_format == "CSV":
             csv = df.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button(label="CSV herunterladen", data=csv, file_name='politik_artikel.csv', mime='text/csv')
+            st.download_button(label="CSV herunterladen", data=csv, file_name='artikel.csv', mime='text/csv')
         elif export_format == "Excel":
-            excel_buffer = pd.ExcelWriter('politik_artikel.xlsx', engine='xlsxwriter')
+            excel_buffer = pd.ExcelWriter('artikel.xlsx', engine='xlsxwriter')
             df.to_excel(excel_buffer, index=False)
             excel_buffer.save()
-            st.download_button(label="Excel herunterladen", data=open('politik_artikel.xlsx', 'rb'), file_name='politik_artikel.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            st.download_button(label="Excel herunterladen", data=open('artikel.xlsx', 'rb'), file_name='artikel.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         elif export_format == "JSON":
             json_data = df.to_json(orient='records', force_ascii=False)
-            st.download_button(label="JSON herunterladen", data=json_data, file_name='politik_artikel.json', mime='application/json')
+            st.download_button(label="JSON herunterladen", data=json_data, file_name='artikel.json', mime='application/json')
     
     # Visualisierung
     st.subheader("Artikel nach Datum")
@@ -147,6 +161,7 @@ def main():
         selected_article = st.selectbox("Artikel auswählen", df['title'])
         article = df[df['title'] == selected_article].iloc[0]
         st.write("**Titel:**", article['title'])
+        st.write("**Rubrik:**", article['rubrik'])
         st.write("**Veröffentlichungsdatum:**", article['publication_date'])
         st.write("**Keywords:**", article['keywords'])
         st.write("**URL:**", article['loc'])
