@@ -115,15 +115,21 @@ def main():
         # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
         df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
     
-    # Verfügbare Rubriken ermitteln
-    rubriken = df['rubrik'].dropna().unique()
-    rubriken.sort()
+    # Verfügbare Rubriken ermitteln und nach Anzahl der Artikel sortieren
+    rubriken_counts = df['rubrik'].value_counts()
+    rubriken = rubriken_counts.index.tolist()
     
     # Filteroptionen im Sidebar
     st.sidebar.header("Filteroptionen")
     
     # Rubrikenauswahl - Standardmäßig keine Rubriken ausgewählt
-    selected_rubriken = st.sidebar.multiselect("Rubrik auswählen", rubriken, default=[])
+    selected_rubriken = st.sidebar.multiselect(
+        "Rubrik auswählen (sortiert nach Anzahl der Artikel)",
+        options=rubriken,
+        format_func=lambda x: f"{x} ({rubriken_counts[x]})",
+        default=[]
+    )
+    
     if selected_rubriken:
         df = df[df['rubrik'].isin(selected_rubriken)]
     else:
@@ -201,10 +207,23 @@ def main():
         st.write("**URL:**", article['loc'])
         if pd.notna(article.get('image_loc', None)):
             st.image(article['image_loc'], caption=article.get('image_caption', ''))
+        
+        # Jina.ai Reader Integration
+        with st.expander("Artikel mit Jina.ai Reader anzeigen"):
+            if st.button("Artikel abrufen"):
+                encoded_url = quote_plus(article['loc'])
+                reader_url = f"https://r.jina.ai/{encoded_url}"
+                try:
+                    reader_response = requests.get(reader_url)
+                    reader_response.raise_for_status()
+                    content = reader_response.text
+                    st.markdown(f"**Response von Jina.ai Reader:**\n\n{content}")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Fehler beim Abrufen des Artikels: {e}")
+            else:
+                st.write("Klicken Sie auf 'Artikel abrufen', um den Artikel über Jina.ai Reader abzurufen.")
     else:
         st.write("Keine Artikel zum Anzeigen verfügbar.")
 
 if __name__ == "__main__":
     main()
-
-
