@@ -57,6 +57,12 @@ def lade_einzelne_sitemap(xml_url):
             daten = {'loc': loc, 'rubrik': rubrik}
             news_element = url.find('news:news', namespaces)
             if news_element is not None:
+                pub_date = news_element.find('news:publication_date', namespaces)
+                if pub_date is not None and pub_date.text:
+                    daten['publication_date'] = pub_date.text
+                else:
+                    daten['publication_date'] = None
+                # Restliche Felder aus news:news extrahieren
                 publication = news_element.find('news:publication', namespaces)
                 if publication is not None:
                     name = publication.find('news:name', namespaces)
@@ -65,21 +71,25 @@ def lade_einzelne_sitemap(xml_url):
                         daten['name'] = name.text
                     if language is not None:
                         daten['language'] = language.text
-                pub_date = news_element.find('news:publication_date', namespaces)
                 title = news_element.find('news:title', namespaces)
                 keywords = news_element.find('news:keywords', namespaces)
-                if pub_date is not None and pub_date.text:
-                    daten['publication_date'] = pub_date.text
-                else:
-                    # Setzen eines Standarddatums oder Überspringen des Artikels
-                    daten['publication_date'] = None  # oder pd.Timestamp.now().isoformat()
                 if title is not None:
                     daten['title'] = title.text
                 if keywords is not None:
                     daten['keywords'] = keywords.text
             else:
-                # Falls 'news:news' Element fehlt, setzen wir 'publication_date' auf None
-                daten['publication_date'] = None
+                # Fallback: Verwenden von 'ns:lastmod' falls vorhanden
+                lastmod_element = url.find('ns:lastmod', namespaces)
+                if lastmod_element is not None and lastmod_element.text:
+                    daten['publication_date'] = lastmod_element.text
+                else:
+                    daten['publication_date'] = None
+                # Restliche Felder können nicht aus 'news:news' extrahiert werden
+                daten['title'] = None
+                daten['keywords'] = None
+                daten['name'] = None
+                daten['language'] = None
+
             image_element = url.find('image:image', namespaces)
             if image_element is not None:
                 image_loc = image_element.find('image:loc', namespaces)
@@ -127,13 +137,32 @@ def main():
         st.warning("Keine Daten verfügbar.")
         return
 
+    # Überprüfen der Daten nach dem Laden
+    st.write("Anzahl der Artikel vor Datumskonvertierung:", len(df))
+    st.write("Erste Zeilen von df:")
+    st.write(df.head())
+
+    # Überprüfen, ob 'publication_date' vorhanden ist
+    if 'publication_date' in df.columns:
+        st.write("Spalte 'publication_date' ist vorhanden.")
+        st.write("Inhalt von 'publication_date' vor Konvertierung:")
+        st.write(df['publication_date'].head(20))
+    else:
+        st.error("Spalte 'publication_date' ist nicht vorhanden.")
+        st.stop()
+
     # Veröffentlichungsdatum in datetime umwandeln
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
+
+    # Anzahl der gültigen und ungültigen Datumswerte
+    st.write("Anzahl der gültigen 'publication_date' nach Konvertierung:", df['publication_date'].notnull().sum())
+    st.write("Anzahl der ungültigen 'publication_date' nach Konvertierung:", df['publication_date'].isnull().sum())
 
     # Entfernen von Zeilen ohne gültiges Veröffentlichungsdatum
     df = df.dropna(subset=['publication_date'])
 
     # Überprüfen, ob 'publication_date' jetzt datetime ist
+    st.write("Datentyp von 'publication_date' nach Konvertierung:", df['publication_date'].dtype)
     if df['publication_date'].dtype == 'datetime64[ns]':
         st.success("Veröffentlichungsdatum erfolgreich in datetime umgewandelt.")
     else:
@@ -141,12 +170,13 @@ def main():
         st.stop()
 
     # Neue Spalte 'time_slot' hinzufügen
-    df['hour'] = df['publication_date'].dt.hour
-    bins = [0, 8, 12, 18, 24]
-    labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
-    df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
-    # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
-    df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
+    if not df.empty and df['publication_date'].notnull().any():
+        df['hour'] = df['publication_date'].dt.hour
+        bins = [0, 8, 12, 18, 24]
+        labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
+        df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+        # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
+        df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
 
     # Quelle hinzufügen
     df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
