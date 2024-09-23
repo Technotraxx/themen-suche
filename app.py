@@ -10,9 +10,8 @@ import altair as alt
 from sitemaps import SITEMAP_LIBRARY
 from kategorien import BEKANNTE_KATEGORIEN
 
-# Funktion zum Herunterladen und Parsen der XML-Datei
-@st.cache_data
-def lade_daten(xml_url):
+# Funktion zum Laden einer einzelnen Sitemap
+def lade_einzelne_sitemap(xml_url):
     try:
         response = requests.get(xml_url)
         response.raise_for_status()
@@ -88,24 +87,43 @@ def lade_daten(xml_url):
     df = pd.DataFrame(ergebnisse)
     return df
 
+# Funktion zum Laden mehrerer Sitemaps
+@st.cache_data
+def lade_daten(xml_urls):
+    dfs = []
+    for xml_url in xml_urls:
+        df = lade_einzelne_sitemap(xml_url)
+        if not df.empty:
+            df['sitemap'] = xml_url  # Quelle hinzufügen
+            dfs.append(df)
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
+    else:
+        return pd.DataFrame()
+
 # Hauptprogramm
 def main():
     st.title("Artikel aus verschiedenen Rubriken")
-    
-    # Auswahl der Sitemap
+
+    # Auswahl der Sitemaps
     st.sidebar.header("Sitemap-Auswahl")
-    sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", list(SITEMAP_LIBRARY.keys()))
-    xml_url = SITEMAP_LIBRARY[sitemap_choice]
-    
-    df = lade_daten(xml_url)
-    
+    sitemap_options = list(SITEMAP_LIBRARY.keys()) + ['Alle Sitemaps']
+    sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", sitemap_options)
+
+    if sitemap_choice == 'Alle Sitemaps':
+        xml_urls = list(SITEMAP_LIBRARY.values())
+    else:
+        xml_urls = [SITEMAP_LIBRARY[sitemap_choice]]
+
+    df = lade_daten(xml_urls)
+
     if df.empty:
         st.warning("Keine Daten verfügbar.")
         return
-    
+
     # Veröffentlichungsdatum in datetime umwandeln
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
-    
+
     # Neue Spalte 'time_slot' hinzufügen
     if not df.empty and df['publication_date'].notnull().any():
         df['hour'] = df['publication_date'].dt.hour
@@ -114,14 +132,22 @@ def main():
         df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
         # Setze 'time_slot' als kategorische Variable mit der gewünschten Reihenfolge
         df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
-    
+
+    # Quelle hinzufügen
+    df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
+
     # Verfügbare Rubriken ermitteln und nach Anzahl der Artikel sortieren
     rubriken_counts = df['rubrik'].value_counts()
     rubriken = rubriken_counts.index.tolist()
-    
+
+    # Verfügbare Quellen ermitteln
+    sources = df['source'].unique()
+    selected_sources = st.sidebar.multiselect("Quelle auswählen", sources, default=sources)
+    df = df[df['source'].isin(selected_sources)]
+
     # Filteroptionen im Sidebar
     st.sidebar.header("Filteroptionen")
-    
+
     # Rubrikenauswahl - Standardmäßig keine Rubriken ausgewählt
     selected_rubriken = st.sidebar.multiselect(
         "Rubrik auswählen (sortiert nach Anzahl der Artikel)",
@@ -129,38 +155,38 @@ def main():
         format_func=lambda x: f"{x} ({rubriken_counts[x]})",
         default=[]
     )
-    
+
     if selected_rubriken:
         df = df[df['rubrik'].isin(selected_rubriken)]
     else:
         # Wenn keine Rubriken ausgewählt sind, leeren DataFrame setzen
         df = df.iloc[0:0]
         st.info("Bitte wählen Sie mindestens eine Rubrik aus, um die Artikel anzuzeigen.")
-    
+
     # Nach Datum filtern
     if not df.empty and df['publication_date'].notnull().any():
         start_date = df['publication_date'].min().date()
         end_date = df['publication_date'].max().date()
         selected_dates = st.sidebar.date_input("Veröffentlichungsdatum", [start_date, end_date])
-        
+
         if len(selected_dates) == 2:
             start_date, end_date = selected_dates
             df = df[(df['publication_date'].dt.date >= start_date) & (df['publication_date'].dt.date <= end_date)]
-    
+
     # Nach Keyword filtern
     keyword = st.sidebar.text_input("Nach Keyword filtern")
     if keyword and not df.empty:
         df = df[df['keywords'].str.contains(keyword, case=False, na=False)]
-    
+
     # Datenanzeige
-    st.subheader(f"Gefundene Artikel in {sitemap_choice}")
+    st.subheader("Gefundene Artikel")
     st.write(f"Anzahl der Artikel: {len(df)}")
-    st.dataframe(df[['publication_date', 'title', 'rubrik', 'keywords', 'loc']])
-    
+    st.dataframe(df[['publication_date', 'title', 'rubrik', 'source', 'keywords', 'loc']])
+
     # Download-Optionen
     st.subheader("Daten exportieren")
     export_format = st.selectbox("Exportformat wählen", ["CSV", "Excel", "JSON"])
-    
+
     if st.button("Daten exportieren"):
         if not df.empty:
             if export_format == "CSV":
@@ -176,13 +202,13 @@ def main():
                 st.download_button(label="JSON herunterladen", data=json_data, file_name='artikel.json', mime='application/json')
         else:
             st.warning("Keine Daten zum Exportieren verfügbar.")
-    
+
     # Visualisierung
     st.subheader("Artikelverteilung nach Zeitslots")
     if not df.empty and 'time_slot' in df.columns:
         # Gruppieren der Daten
         artikel_pro_slot = df.groupby('time_slot').size().reset_index(name='Anzahl')
-        
+
         # Erstellung des Balkendiagramms mit Altair
         chart = alt.Chart(artikel_pro_slot).mark_bar().encode(
             x=alt.X('time_slot:N', sort=labels, title='Zeitslot'),
@@ -194,7 +220,7 @@ def main():
         st.altair_chart(chart)
     else:
         st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
-    
+
     # Einzelne Artikel anzeigen
     st.subheader("Artikel Details")
     if not df.empty:
@@ -202,12 +228,13 @@ def main():
         article = df[df['title'] == selected_article].iloc[0]
         st.write("**Titel:**", article['title'])
         st.write("**Rubrik:**", article['rubrik'])
+        st.write("**Quelle:**", article['source'])
         st.write("**Veröffentlichungsdatum:**", article['publication_date'])
         st.write("**Keywords:**", article['keywords'])
         st.write("**URL:**", article['loc'])
         if pd.notna(article.get('image_loc', None)):
             st.image(article['image_loc'], caption=article.get('image_caption', ''))
-        
+
         # Jina.ai Reader Integration
         with st.expander("Artikel mit Jina.ai Reader anzeigen"):
             if st.button("Artikel abrufen"):
