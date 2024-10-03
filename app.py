@@ -24,30 +24,23 @@ def load_and_process_sitemap(xml_url):
         if loc is not None and loc.text:
             category = extract_category(loc.text)
             results.append({'loc': loc.text, 'category': category})
-            
-            # Debugging output
-            st.write(f"URL: {loc.text}")
-            st.write(f"Extracted Category: {category}")
-            st.write("---")
 
-    return pd.DataFrame(results)
+    df = pd.DataFrame(results)
+    return df
 
 def extract_category(url):
     parsed_url = urlparse(url)
     path_parts = parsed_url.path.strip('/').split('/')
     
-    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id', 'html'}
+    known_categories = {'politik', 'wirtschaft', 'panorama', 'kultur', 'leben', 'gesundheit', 'digital', 'audio', 'mobilitaet', 'regional'}
     
     categories = []
     for part in path_parts[:3]:  # Only consider the first 3 parts of the path
         part = part.lower().rstrip('.html')
-        if len(part) > 2 and not part.isdigit() and part not in ignore_words:
+        if part in known_categories:
             categories.append(part)
-    
-    if not categories:
-        domain = parsed_url.netloc.split('.')[-2]
-        if domain not in ignore_words:
-            categories.append(domain)
+        elif categories:  # If we've found a category and this isn't one, stop looking
+            break
     
     return ' > '.join(categories) if categories else 'Unbekannt'
     
@@ -237,6 +230,7 @@ def main():
         st.sidebar.header("Filteroptionen")
 
         # Flexible category filter
+
         if 'category' in df.columns:
             all_categories = set()
             for category in df['category'].dropna():
@@ -251,10 +245,10 @@ def main():
                 format_func=lambda x: f"{x} ({category_counts[x]})",
                 default=[]
             )
-
+        
             if selected_categories:
                 df = df[df['category'].apply(lambda x: any(cat.lower() in x.lower() for cat in selected_categories))]
-
+        
         if df.empty:
             st.info("Keine Artikel gefunden. Bitte passen Sie die Filterkriterien an.")
             return
