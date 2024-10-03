@@ -329,10 +329,10 @@ def main():
 
             with st.expander("Artikel mit Jina.ai Reader anzeigen"):
                 if st.button("Artikel abrufen"):
-                    encoded_loc = quote(article['loc'], safe='')
-                    reader_url = f"https://r.jina.ai/{encoded_loc}"
+                    reader_url = "https://r.jina.ai/read"
+                    params = {'url': article['loc']}
                     try:
-                        reader_response = requests.get(reader_url)
+                        reader_response = requests.get(reader_url, params=params)
                         reader_response.raise_for_status()
                         content = reader_response.text
                         st.markdown(f"**Response von Jina.ai Reader:**\n\n{content}")
