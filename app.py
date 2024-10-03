@@ -307,7 +307,74 @@ def main():
     st.write(f"Anzahl der Artikel: {len(df)}")
     st.dataframe(df[['publication_date', 'title', 'rubrik_level_1', 'rubrik_level_2', 'source', 'keywords', 'loc']])
 
-    # Rest Ihrer App...
+        # Download-Optionen
+    st.subheader("Daten exportieren")
+    export_format = st.selectbox("Exportformat wählen", ["CSV", "Excel", "JSON"])
+
+    if st.button("Daten exportieren"):
+        if not df.empty:
+            if export_format == "CSV":
+                csv = df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(label="CSV herunterladen", data=csv, file_name='artikel.csv', mime='text/csv')
+            elif export_format == "Excel":
+                excel_buffer = pd.ExcelWriter('artikel.xlsx', engine='xlsxwriter')
+                df.to_excel(excel_buffer, index=False)
+                excel_buffer.save()
+                st.download_button(label="Excel herunterladen", data=open('artikel.xlsx', 'rb'), file_name='artikel.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            elif export_format == "JSON":
+                json_data = df.to_json(orient='records', force_ascii=False)
+                st.download_button(label="JSON herunterladen", data=json_data, file_name='artikel.json', mime='application/json')
+        else:
+            st.warning("Keine Daten zum Exportieren verfügbar.")
+
+    # Visualisierung
+    st.subheader("Artikelverteilung nach Zeitslots")
+    if not df.empty and 'time_slot' in df.columns:
+        # Gruppieren der Daten
+        artikel_pro_slot = df.groupby('time_slot').size().reset_index(name='Anzahl')
+
+        # Erstellung des Balkendiagramms mit Altair
+        chart = alt.Chart(artikel_pro_slot).mark_bar().encode(
+            x=alt.X('time_slot:N', sort=labels, title='Zeitslot'),
+            y=alt.Y('Anzahl:Q', title='Anzahl der Artikel')
+        ).properties(
+            width=600,
+            height=400
+        )
+        st.altair_chart(chart)
+    else:
+        st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
+
+    # Einzelne Artikel anzeigen
+    st.subheader("Artikel Details")
+    if not df.empty:
+        selected_article = st.selectbox("Artikel auswählen", df['title'])
+        article = df[df['title'] == selected_article].iloc[0]
+        st.write("**Titel:**", article['title'])
+        st.write("**Rubrik:**", article['rubrik'])
+        st.write("**Quelle:**", article['source'])
+        st.write("**Veröffentlichungsdatum:**", article['publication_date'])
+        st.write("**Keywords:**", article['keywords'])
+        st.write("**URL:**", article['loc'])
+        if pd.notna(article.get('image_loc', None)):
+            st.image(article['image_loc'], caption=article.get('image_caption', ''))
+
+        # Jina.ai Reader Integration
+        with st.expander("Artikel mit Jina.ai Reader anzeigen"):
+            if st.button("Artikel abrufen"):
+                # Verwenden der Artikel-URL direkt ohne Encoding
+                reader_url = f"https://r.jina.ai/{article['loc']}"
+                try:
+                    reader_response = requests.get(reader_url)
+                    reader_response.raise_for_status()
+                    content = reader_response.text
+                    st.markdown(f"**Response von Jina.ai Reader:**\n\n{content}")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Fehler beim Abrufen des Artikels: {e}")
+            else:
+                st.write("Klicken Sie auf 'Artikel abrufen', um den Artikel über Jina.ai Reader abzurufen.")
+    else:
+        st.write("Keine Artikel zum Anzeigen verfügbar.")
 
 if __name__ == "__main__":
     main()
