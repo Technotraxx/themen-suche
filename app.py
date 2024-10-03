@@ -6,33 +6,35 @@ from urllib.parse import urlparse, quote
 import altair as alt
 from io import BytesIO
 
-# Keine Verwendung von Kategorien aus einer separaten Datei mehr
-# from sitemaps import SITEMAP_LIBRARY
-
-# Beispielhafte Definition von SITEMAP_LIBRARY für die Demonstration
-SITEMAP_LIBRARY = {
-    'Tagesschau': 'https://www.tagesschau.de/export/video-podcast/webxml/tagesschau-in-100-sekunden/',
-    'Welt': 'https://www.welt.de/feeds/latest.rss',
-    # Weitere Feeds hinzufügen...
-}
+# Importieren der Sitemaps und Kategorien aus den separaten Dateien
+from sitemaps import SITEMAP_LIBRARY
+from kategorien import BEKANNTE_KATEGORIEN
 
 def extrahiere_rubriken(loc):
     if not loc:
-        return []
+        return ['Unbekannt']
     parsed_url = urlparse(loc)
     path_parts = parsed_url.path.strip('/').split('/')
-    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news'}
-    categories = []
+    
+    # Define a set of words to ignore
+    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id'}
+    
+    # Extract domain name (e.g., 'spiegel' from 'www.spiegel.de')
+    domain = parsed_url.netloc.split('.')[-2]
+    
+    rubriken = []
     for part in path_parts:
-        part_lower = part.lower()
-        if part_lower not in ignore_words and not part_lower.isdigit():
-            if part_lower not in categories:
-                categories.append(part_lower)
-        if len(categories) >= 2:
-            break  # Wir haben genug Kategorien
-    if not categories:
-        categories.append('Unbekannt')
-    return categories
+        part = part.lower()
+        if len(part) > 2 and not part.isdigit() and part not in ignore_words:
+            rubriken.append(part)
+        if len(rubriken) == 2:
+            break
+    
+    # If no categories found in path, use domain name
+    if not rubriken and domain not in ignore_words:
+        rubriken.append(domain)
+    
+    return rubriken if rubriken else ['Unbekannt']
 
 def lade_einzelne_sitemap(xml_url):
     try:
@@ -42,11 +44,13 @@ def lade_einzelne_sitemap(xml_url):
     except requests.exceptions.RequestException as e:
         st.error(f"Fehler beim Herunterladen der XML-Datei: {e}")
         return pd.DataFrame()
+
     try:
         root = ET.fromstring(xml_content)
     except ET.ParseError as e:
         st.error(f"Fehler beim Parsen der XML-Datei: {e}")
         return pd.DataFrame()
+
     namespaces = {
         'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9',
         'news': 'http://www.google.com/schemas/sitemap-news/0.9',
@@ -56,7 +60,9 @@ def lade_einzelne_sitemap(xml_url):
         'rss': 'http://purl.org/rss/1.0/',
         'dc': 'http://purl.org/dc/elements/1.1/',
     }
+
     ergebnisse = []
+
     if root.tag.endswith('urlset'):
         for url in root.findall('ns:url', namespaces):
             daten = verarbeite_sitemap_url(url, namespaces)
@@ -76,12 +82,17 @@ def lade_einzelne_sitemap(xml_url):
                     ergebnisse.append(daten)
     else:
         st.warning(f"Unbekanntes Root-Tag {root.tag} in {xml_url}")
+
     if not ergebnisse:
         st.warning(f"Keine Einträge in der Sitemap von {xml_url} gefunden.")
         return pd.DataFrame()
+
     df = pd.DataFrame(ergebnisse)
-    # Kombiniere Rubriken zu einer einzigen Kategoriezeichenkette, Reihenfolge irrelevant
-    df['category'] = df['rubriken'].apply(lambda x: ' & '.join(sorted(set(x))) if x else 'Unbekannt')
+    
+    # Create the category column using the refined extrahiere_rubriken function
+    df['rubriken'] = df['loc'].apply(extrahiere_rubriken)
+    df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x != ['Unbekannt'] else 'Unbekannt')
+    
     return df
 
 def verarbeite_sitemap_url(url, namespaces):
@@ -90,14 +101,17 @@ def verarbeite_sitemap_url(url, namespaces):
         loc = loc_element.text
         rubriken = extrahiere_rubriken(loc)
         daten = {'loc': loc, 'rubriken': rubriken}
+
         news_element = url.find('news:news', namespaces)
         if news_element is not None:
             daten.update(extrahiere_news_daten(news_element, namespaces))
         else:
             daten.update(extrahiere_fallback_daten(url, namespaces))
+
         image_element = url.find('image:image', namespaces)
         if image_element is not None:
             daten.update(extrahiere_bild_daten(image_element, namespaces))
+
         return daten
     return {}
 
@@ -108,6 +122,7 @@ def verarbeite_atom_entry(entry, namespaces):
                 entry.find('atom:updated', namespaces) or
                 entry.find('dc:date', namespaces))
     summary = entry.find('atom:summary', namespaces)
+
     loc = link.get('href') if link is not None else None
     rubriken = extrahiere_rubriken(loc if loc else '')
     daten = {
@@ -117,8 +132,10 @@ def verarbeite_atom_entry(entry, namespaces):
         'keywords': None,
         'rubriken': rubriken
     }
+
     if summary is not None:
         daten['description'] = summary.text
+
     return daten
 
 def verarbeite_rss_item(item, namespaces):
@@ -126,6 +143,7 @@ def verarbeite_rss_item(item, namespaces):
     link = item.find('link')
     pub_date = item.find('pubDate')
     description = item.find('description')
+
     loc = link.text if link is not None else None
     rubriken = extrahiere_rubriken(loc if loc else '')
     daten = {
@@ -135,8 +153,10 @@ def verarbeite_rss_item(item, namespaces):
         'keywords': None,
         'rubriken': rubriken
     }
+
     if description is not None:
         daten['description'] = description.text
+
     return daten
 
 def extrahiere_news_daten(news_element, namespaces):
@@ -144,6 +164,7 @@ def extrahiere_news_daten(news_element, namespaces):
     pub_date = news_element.find('news:publication_date', namespaces)
     if pub_date is not None and pub_date.text:
         daten['publication_date'] = pub_date.text
+
     publication = news_element.find('news:publication', namespaces)
     if publication is not None:
         name = publication.find('news:name', namespaces)
@@ -152,12 +173,14 @@ def extrahiere_news_daten(news_element, namespaces):
             daten['name'] = name.text
         if language is not None:
             daten['language'] = language.text
+
     title = news_element.find('news:title', namespaces)
     keywords = news_element.find('news:keywords', namespaces)
     if title is not None:
         daten['title'] = title.text
     if keywords is not None:
         daten['keywords'] = keywords.text
+
     return daten
 
 def extrahiere_fallback_daten(url, namespaces):
@@ -203,17 +226,22 @@ def main():
     st.sidebar.header("Sitemap-Auswahl")
     sitemap_options = list(SITEMAP_LIBRARY.keys()) + ['Alle Sitemaps']
     sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", sitemap_options)
+
     if sitemap_choice == 'Alle Sitemaps':
         xml_urls = list(SITEMAP_LIBRARY.values())
     else:
         xml_urls = [SITEMAP_LIBRARY[sitemap_choice]]
+
     df = lade_daten(xml_urls)
+
     if df.empty:
         st.warning("Keine Daten verfügbar.")
         return
+
     st.write("Vorhandene Spalten im DataFrame:", df.columns.tolist())
     st.write("Anzahl der geladenen Zeilen:", len(df))
     st.write(df.head())
+
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
     df = df.dropna(subset=['publication_date'])
     df['publication_date'] = df['publication_date'].dt.tz_convert('Europe/Berlin').dt.tz_localize(None)
@@ -223,43 +251,55 @@ def main():
     df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
     df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
     df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
+
     sources = df['source'].unique()
     selected_sources = st.sidebar.multiselect("Quelle auswählen", sources, default=sources)
     df = df[df['source'].isin(selected_sources)]
-    # Erstelle eine Liste aller individuellen Kategorien
-    all_categories = set()
-    for rubriken in df['rubriken']:
-        all_categories.update(rubriken)
-    all_categories = sorted(all_categories)
-    # Zähle die Anzahl der Artikel pro Kategorie
-    category_counts = {cat: df['rubriken'].apply(lambda x: cat in x).sum() for cat in all_categories}
+
     st.sidebar.header("Filteroptionen")
+
+    # Flexible category filter
+    all_categories = set()
+    for category in df['category'].dropna():
+        all_categories.update(category.split(' > '))
+    
+    category_counts = {cat: df['category'].str.contains(cat, case=False).sum() for cat in all_categories}
+    category_options = sorted(all_categories)
+    
     selected_categories = st.sidebar.multiselect(
-        "Kategorien auswählen",
-        options=all_categories,
+        "Kategorie auswählen",
+        options=category_options,
         format_func=lambda x: f"{x} ({category_counts[x]})",
         default=[]
     )
+
     if selected_categories:
-        df = df[df['rubriken'].apply(lambda rubriken: any(cat in rubriken for cat in selected_categories))]
+        df = df[df['category'].apply(lambda x: any(cat in x for cat in selected_categories))]
+
     if df.empty:
         st.info("Keine Artikel gefunden. Bitte passen Sie die Filterkriterien an.")
         return
+
     if not df.empty and df['publication_date'].notnull().any():
         start_date = df['publication_date'].min().date()
         end_date = df['publication_date'].max().date()
         selected_dates = st.sidebar.date_input("Veröffentlichungsdatum", [start_date, end_date])
+
         if len(selected_dates) == 2:
             start_date, end_date = selected_dates
             df = df[(df['publication_date'].dt.date >= start_date) & (df['publication_date'].dt.date <= end_date)]
+
     keyword = st.sidebar.text_input("Nach Keyword filtern")
     if keyword and not df.empty:
-        df = df[df['title'].str.contains(keyword, case=False, na=False) | df['keywords'].str.contains(keyword, case=False, na=False)]
+        df = df[df['keywords'].str.contains(keyword, case=False, na=False) | df['title'].str.contains(keyword, case=False, na=False)]
+
     st.subheader("Gefundene Artikel")
     st.write(f"Anzahl der Artikel: {len(df)}")
     st.dataframe(df[['publication_date', 'title', 'category', 'source', 'keywords', 'loc']])
+
     st.subheader("Daten exportieren")
     export_format = st.selectbox("Exportformat wählen", ["CSV", "Excel", "JSON"])
+
     if st.button("Daten exportieren"):
         if not df.empty:
             if export_format == "CSV":
@@ -286,6 +326,7 @@ def main():
                 )
         else:
             st.warning("Keine Daten zum Exportieren verfügbar.")
+
     st.subheader("Artikelverteilung nach Zeitslots")
     if not df.empty and 'time_slot' in df.columns:
         artikel_pro_slot = df.groupby('time_slot').size().reset_index(name='Anzahl')
@@ -299,6 +340,7 @@ def main():
         st.altair_chart(chart)
     else:
         st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
+
     st.subheader("Artikel Details")
     if not df.empty:
         search_term = st.text_input("Artikeltitel suchen")
@@ -307,13 +349,14 @@ def main():
             selected_index = st.selectbox("Artikel auswählen", filtered_df.index, format_func=lambda x: filtered_df.at[x, 'title'])
             article = filtered_df.loc[selected_index]
             st.write("**Titel:**", article['title'])
-            st.write("**Kategorien:**", ', '.join(article['rubriken']))
+            st.write("**Kategorie:**", article['category'])
             st.write("**Quelle:**", article['source'])
             st.write("**Veröffentlichungsdatum:**", article['publication_date'])
             st.write("**Keywords:**", article['keywords'])
             st.write("**URL:**", article['loc'])
             if pd.notna(article.get('image_loc', None)):
                 st.image(article['image_loc'], caption=article.get('image_caption', ''))
+
             with st.expander("Artikel mit Jina.ai Reader anzeigen"):
                 if st.button("Artikel abrufen"):
                     encoded_loc = quote(article['loc'], safe='')
