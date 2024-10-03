@@ -17,22 +17,25 @@ def extrahiere_rubriken(loc):
     path_parts = parsed_url.path.strip('/').split('/')
     
     # Define a set of words to ignore
-    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id'}
-    
-    # Extract domain name (e.g., 'spiegel' from 'www.spiegel.de')
-    domain = parsed_url.netloc.split('.')[-2]
+    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id', 'html'}
     
     rubriken = []
     for part in path_parts:
         part = part.lower()
         if len(part) > 2 and not part.isdigit() and part not in ignore_words:
-            rubriken.append(part)
-        if len(rubriken) == 2:
-            break
+            # Remove common suffixes
+            part = part.rstrip('.html')
+            if '-' in part:
+                # For URLs like "ausland/europa/ukraine-jermak-102.html"
+                rubriken.extend(part.split('-'))
+            else:
+                rubriken.append(part)
     
-    # If no categories found in path, use domain name
-    if not rubriken and domain not in ignore_words:
-        rubriken.append(domain)
+    # If no categories found, use the domain name as a fallback
+    if not rubriken:
+        domain = parsed_url.netloc.split('.')[-2]
+        if domain not in ignore_words:
+            rubriken.append(domain)
     
     return rubriken if rubriken else ['Unbekannt']
 
@@ -89,11 +92,11 @@ def lade_einzelne_sitemap(xml_url):
 
     df = pd.DataFrame(ergebnisse)
     
-    # Ensure that the 'category' column exists
-    if 'category' not in df.columns:
-        df['category'] = df['loc'].apply(lambda x: ' > '.join(extrahiere_rubriken(x)))
+    # Create the category column using the new extrahiere_rubriken function
+    df['rubriken'] = df['loc'].apply(extrahiere_rubriken)
+    df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x != ['Unbekannt'] else 'Unbekannt')
     
-    return df  # Make sure to return the DataFrame
+    return df
     
 def verarbeite_sitemap_url(url, namespaces):
     loc_element = url.find('ns:loc', namespaces)
