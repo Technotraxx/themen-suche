@@ -358,3 +358,6 @@ def main():
             st.write("Keine Artikel zum Anzeigen verfügbar.")
     else:
         st.warning("No data available.")
+
+if __name__ == "__main__":
+    main()
