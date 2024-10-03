@@ -30,9 +30,13 @@ def extrahiere_rubriken(loc):
         if len(rubriken) == 2:
             break
     
+    # If only one category found, it's valid (not Unbekannt)
+    if len(rubriken) == 1:
+        return rubriken
+    
     # If no categories found in path, use domain name
     if not rubriken and domain not in ignore_words:
-        rubriken.append(domain)
+        return [domain]
     
     return rubriken if rubriken else ['Unbekannt']
 
@@ -89,7 +93,7 @@ def lade_einzelne_sitemap(xml_url):
 
     df = pd.DataFrame(ergebnisse)
     
-    # Create the category column using the refined extrahiere_rubriken function
+    # Create the category column using the improved extrahiere_rubriken function
     df['rubriken'] = df['loc'].apply(extrahiere_rubriken)
     df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x != ['Unbekannt'] else 'Unbekannt')
     
