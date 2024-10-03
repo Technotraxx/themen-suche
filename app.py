@@ -16,12 +16,22 @@ def extrahiere_rubriken(loc):
     parsed_url = urlparse(loc)
     path_parts = parsed_url.path.strip('/').split('/')
     rubriken = []
+    
+    # Define a set of words to ignore (common URL parts that are not categories)
+    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news'}
+    
     for part in path_parts:
-        if part and part.lower() in BEKANNTE_KATEGORIEN:
-            rubriken.append(part.lower())
+        part = part.lower()
+        # Check if the part is long enough and not just a number or ignored word
+        if len(part) > 2 and not part.isdigit() and part not in ignore_words:
+            if part in BEKANNTE_KATEGORIEN:
+                rubriken.append(part)
+            elif not rubriken:  # If we haven't found any known categories yet, include this as a potential category
+                rubriken.append(part)
         elif rubriken:
-            # Stop if we've found at least one category and the current part is not a known category
+            # Stop if we've found at least one category and the current part doesn't qualify
             break
+    
     return rubriken if rubriken else ['Unbekannt']
 
 def lade_einzelne_sitemap(xml_url):
@@ -76,8 +86,15 @@ def lade_einzelne_sitemap(xml_url):
         return pd.DataFrame()
 
     df = pd.DataFrame(ergebnisse)
+    
     # Combine rubrik levels into a single category
     df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x else 'Unbekannt')
+    
+    # If the category is still 'Unbekannt', try to extract a category from the URL
+    df.loc[df['category'] == 'Unbekannt', 'category'] = df.loc[df['category'] == 'Unbekannt', 'loc'].apply(
+        lambda x: urlparse(x).path.split('/')[1] if len(urlparse(x).path.split('/')) > 1 else 'Unbekannt'
+    )
+    
     return df
 
 def verarbeite_sitemap_url(url, namespaces):
@@ -243,9 +260,14 @@ def main():
 
     st.sidebar.header("Filteroptionen")
 
-    # Single category filter
-    category_counts = df['category'].value_counts()
-    category_options = category_counts.index.tolist()
+    # Flexible category filter
+    all_categories = set()
+    for category in df['category'].dropna():
+        all_categories.update(category.split(' > '))
+    
+    category_counts = {cat: df['category'].str.contains(cat, case=False).sum() for cat in all_categories}
+    category_options = sorted(all_categories)
+    
     selected_categories = st.sidebar.multiselect(
         "Kategorie auswählen",
         options=category_options,
@@ -254,7 +276,7 @@ def main():
     )
 
     if selected_categories:
-        df = df[df['category'].isin(selected_categories)]
+        df = df[df['category'].apply(lambda x: any(cat in x for cat in selected_categories))]
 
     if df.empty:
         st.info("Keine Artikel gefunden. Bitte passen Sie die Filterkriterien an.")
