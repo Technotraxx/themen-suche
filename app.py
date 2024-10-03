@@ -50,6 +50,8 @@ def lade_einzelne_sitemap(xml_url):
             for item in channel.findall('item'):
                 ergebnisse.append(verarbeite_rss_item(item, namespaces))
 
+    # Entfernen von leeren Ergebnissen
+    ergebnisse = [item for item in ergebnisse if item]
     df = pd.DataFrame(ergebnisse)
     return df
 
@@ -75,16 +77,19 @@ def verarbeite_sitemap_url(url, namespaces):
 
 def verarbeite_atom_entry(entry, namespaces):
     title = entry.find('atom:title', namespaces)
-    link = entry.find('atom:link[@rel="alternate"]', namespaces)
-    pub_date = entry.find('atom:published', namespaces) or entry.find('dc:date', namespaces)
+    link = entry.find('atom:link', namespaces)
+    pub_date = (entry.find('atom:published', namespaces) or
+                entry.find('atom:updated', namespaces) or
+                entry.find('dc:date', namespaces))
     summary = entry.find('atom:summary', namespaces)
     
+    loc = link.get('href') if link is not None else None
     daten = {
         'title': title.text if title is not None else None,
-        'loc': link.get('href') if link is not None else None,
+        'loc': loc,
         'publication_date': pub_date.text if pub_date is not None else None,
         'keywords': None,
-        'rubrik': extrahiere_rubrik(link.get('href') if link is not None else '')
+        'rubrik': extrahiere_rubrik(loc if loc is not None else '')
     }
     
     if summary is not None:
