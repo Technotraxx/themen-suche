@@ -183,7 +183,7 @@ def main():
     sitemap_options = list(SITEMAP_LIBRARY.keys()) + ['Alle Sitemaps']
     sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", sitemap_options)
 
-   if sitemap_choice == 'Alle Sitemaps':
+    if sitemap_choice == 'Alle Sitemaps':
         xml_urls = list(SITEMAP_LIBRARY.values())
     else:
         xml_urls = [SITEMAP_LIBRARY[sitemap_choice]]
@@ -199,10 +199,6 @@ def main():
         df = pd.concat(dfs, ignore_index=True)
     else:
         df = pd.DataFrame()
-
-    if df.empty:
-        st.warning("Keine Daten verfügbar.")
-        return
 
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
     df = df.dropna(subset=['publication_date'])
