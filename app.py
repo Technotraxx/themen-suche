@@ -15,21 +15,16 @@ def extrahiere_rubriken(loc):
         return []
     parsed_url = urlparse(loc)
     path_parts = parsed_url.path.strip('/').split('/')
-    rubriken = []
     
     # Define a set of words to ignore (common URL parts that are not categories)
-    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news'}
+    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id'}
     
+    rubriken = []
     for part in path_parts:
         part = part.lower()
-        # Check if the part is long enough and not just a number or ignored word
         if len(part) > 2 and not part.isdigit() and part not in ignore_words:
-            if part in BEKANNTE_KATEGORIEN:
-                rubriken.append(part)
-            elif not rubriken:  # If we haven't found any known categories yet, include this as a potential category
-                rubriken.append(part)
-        elif rubriken:
-            # Stop if we've found at least one category and the current part doesn't qualify
+            rubriken.append(part)
+        if len(rubriken) == 2:  # Stop after finding two categories
             break
     
     return rubriken if rubriken else ['Unbekannt']
@@ -86,14 +81,9 @@ def lade_einzelne_sitemap(xml_url):
         return pd.DataFrame()
 
     df = pd.DataFrame(ergebnisse)
-    
-    # Combine rubrik levels into a single category
-    df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x else 'Unbekannt')
-    
-    # If the category is still 'Unbekannt', try to extract a category from the URL
-    df.loc[df['category'] == 'Unbekannt', 'category'] = df.loc[df['category'] == 'Unbekannt', 'loc'].apply(
-        lambda x: urlparse(x).path.split('/')[1] if len(urlparse(x).path.split('/')) > 1 else 'Unbekannt'
-    )
+          
+    # Create the category column using the new extrahiere_rubriken function
+    df['category'] = df['loc'].apply(lambda x: ' > '.join(extrahiere_rubriken(x)))
     
     return df
 
