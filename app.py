@@ -39,10 +39,10 @@ def extract_category(url):
     ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id', 'html'}
     
     categories = []
-    for part in path_parts:
+    for part in path_parts[:3]:  # Only consider the first 3 parts of the path
         part = part.lower().rstrip('.html')
         if len(part) > 2 and not part.isdigit() and part not in ignore_words:
-            categories.extend(part.split('-'))
+            categories.append(part)
     
     if not categories:
         domain = parsed_url.netloc.split('.')[-2]
@@ -200,15 +200,26 @@ def main():
     else:
         df = pd.DataFrame()
 
-    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
-    df = df.dropna(subset=['publication_date'])
-    df['publication_date'] = df['publication_date'].dt.tz_convert('Europe/Berlin').dt.tz_localize(None)
-    df['hour'] = df['publication_date'].dt.hour
-    bins = [0, 8, 12, 18, 24]
-    labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
-    df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
-    df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
-    df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
+    if not df.empty:
+        # Handle missing publication dates
+        df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
+        df = df.dropna(subset=['publication_date'])
+        
+        if not df.empty:
+            df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
+            df = df.dropna(subset=['publication_date'])
+            df['publication_date'] = df['publication_date'].dt.tz_convert('Europe/Berlin').dt.tz_localize(None)
+            df['hour'] = df['publication_date'].dt.hour
+            bins = [0, 8, 12, 18, 24]
+            labels = ['0-8 Uhr', '8-12 Uhr', '12-18 Uhr', '18-24 Uhr']
+            df['time_slot'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False, include_lowest=True)
+            df['time_slot'] = pd.Categorical(df['time_slot'], categories=labels, ordered=True)
+            df['source'] = df['loc'].apply(lambda x: urlparse(x).netloc)
+        else:
+            st.warning("No valid publication dates found in the data.")
+    else:
+        st.warning("No data available.")
+      
 
     sources = df['source'].unique()
     selected_sources = st.sidebar.multiselect("Quelle auswählen", sources, default=sources)
