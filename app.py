@@ -8,95 +8,48 @@ from io import BytesIO
 
 # Importieren der Sitemaps und Kategorien aus den separaten Dateien
 from sitemaps import SITEMAP_LIBRARY
-from kategorien import BEKANNTE_KATEGORIEN
 
-def extrahiere_rubriken(loc):
-    if not loc:
-        return ['Unbekannt']
-    parsed_url = urlparse(loc)
-    path_parts = parsed_url.path.strip('/').split('/')
-    
-    # Define a set of words to ignore
-    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id', 'html'}
-    
-    rubriken = []
-    for part in path_parts:
-        part = part.lower()
-        if len(part) > 2 and not part.isdigit() and part not in ignore_words:
-            # Remove common suffixes
-            part = part.rstrip('.html')
-            if '-' in part:
-                # For URLs like "ausland/europa/ukraine-jermak-102.html"
-                rubriken.extend(part.split('-'))
-            else:
-                rubriken.append(part)
-    
-    # If no categories found, use the domain name as a fallback
-    if not rubriken:
-        domain = parsed_url.netloc.split('.')[-2]
-        if domain not in ignore_words:
-            rubriken.append(domain)
-    
-    return rubriken if rubriken else ['Unbekannt']
-
-def lade_einzelne_sitemap(xml_url):
+def load_and_process_sitemap(xml_url):
     try:
         response = requests.get(xml_url)
         response.raise_for_status()
-        xml_content = response.content
-    except requests.exceptions.RequestException as e:
-        st.error(f"Fehler beim Herunterladen der XML-Datei: {e}")
+        root = ET.fromstring(response.content)
+    except Exception as e:
+        st.error(f"Error loading or parsing sitemap {xml_url}: {e}")
         return pd.DataFrame()
 
-    try:
-        root = ET.fromstring(xml_content)
-    except ET.ParseError as e:
-        st.error(f"Fehler beim Parsen der XML-Datei: {e}")
-        return pd.DataFrame()
+    results = []
+    for url in root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}url'):
+        loc = url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}loc')
+        if loc is not None and loc.text:
+            category = extract_category(loc.text)
+            results.append({'loc': loc.text, 'category': category})
+            
+            # Debugging output
+            st.write(f"URL: {loc.text}")
+            st.write(f"Extracted Category: {category}")
+            st.write("---")
 
-    namespaces = {
-        'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9',
-        'news': 'http://www.google.com/schemas/sitemap-news/0.9',
-        'image': 'http://www.google.com/schemas/sitemap-image/1.1',
-        'video': 'http://www.google.com/schemas/sitemap-video/1.1',
-        'atom': 'http://www.w3.org/2005/Atom',
-        'rss': 'http://purl.org/rss/1.0/',
-        'dc': 'http://purl.org/dc/elements/1.1/',
-    }
+    return pd.DataFrame(results)
 
-    ergebnisse = []
-
-    if root.tag.endswith('urlset'):
-        for url in root.findall('ns:url', namespaces):
-            daten = verarbeite_sitemap_url(url, namespaces)
-            if daten:
-                ergebnisse.append(daten)
-    elif root.tag.endswith('feed'):
-        for entry in root.findall('atom:entry', namespaces):
-            daten = verarbeite_atom_entry(entry, namespaces)
-            if daten:
-                ergebnisse.append(daten)
-    elif root.tag == 'rss':
-        channel = root.find('channel')
-        if channel is not None:
-            for item in channel.findall('item'):
-                daten = verarbeite_rss_item(item, namespaces)
-                if daten:
-                    ergebnisse.append(daten)
-    else:
-        st.warning(f"Unbekanntes Root-Tag {root.tag} in {xml_url}")
-
-    if not ergebnisse:
-        st.warning(f"Keine Einträge in der Sitemap von {xml_url} gefunden.")
-        return pd.DataFrame()
-
-    df = pd.DataFrame(ergebnisse)
+def extract_category(url):
+    parsed_url = urlparse(url)
+    path_parts = parsed_url.path.strip('/').split('/')
     
-    # Create the category column using the new extrahiere_rubriken function
-    df['rubriken'] = df['loc'].apply(extrahiere_rubriken)
-    df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x != ['Unbekannt'] else 'Unbekannt')
+    ignore_words = {'www', 'com', 'de', 'article', 'articles', 'story', 'stories', 'news', 'id', 'html'}
     
-    return df
+    categories = []
+    for part in path_parts:
+        part = part.lower().rstrip('.html')
+        if len(part) > 2 and not part.isdigit() and part not in ignore_words:
+            categories.extend(part.split('-'))
+    
+    if not categories:
+        domain = parsed_url.netloc.split('.')[-2]
+        if domain not in ignore_words:
+            categories.append(domain)
+    
+    return ' > '.join(categories) if categories else 'Unbekannt'
     
 def verarbeite_sitemap_url(url, namespaces):
     loc_element = url.find('ns:loc', namespaces)
@@ -230,20 +183,26 @@ def main():
     sitemap_options = list(SITEMAP_LIBRARY.keys()) + ['Alle Sitemaps']
     sitemap_choice = st.sidebar.selectbox("Wählen Sie eine Sitemap", sitemap_options)
 
-    if sitemap_choice == 'Alle Sitemaps':
+   if sitemap_choice == 'Alle Sitemaps':
         xml_urls = list(SITEMAP_LIBRARY.values())
     else:
         xml_urls = [SITEMAP_LIBRARY[sitemap_choice]]
 
-    df = lade_daten(xml_urls)
+    dfs = []
+    for xml_url in xml_urls:
+        df = load_and_process_sitemap(xml_url)
+        if not df.empty:
+            df['sitemap'] = xml_url
+            dfs.append(df)
+
+    if dfs:
+        df = pd.concat(dfs, ignore_index=True)
+    else:
+        df = pd.DataFrame()
 
     if df.empty:
         st.warning("Keine Daten verfügbar.")
         return
-
-    st.write("Vorhandene Spalten im DataFrame:", df.columns.tolist())
-    st.write("Anzahl der geladenen Zeilen:", len(df))
-    st.write(df.head())
 
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
     df = df.dropna(subset=['publication_date'])
