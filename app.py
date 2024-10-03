@@ -31,9 +31,142 @@ def lade_einzelne_sitemap(xml_url):
         'news': 'http://www.google.com/schemas/sitemap-news/0.9',
         'image': 'http://www.google.com/schemas/sitemap-image/1.1',
         'video': 'http://www.google.com/schemas/sitemap-video/1.1',
+        'atom': 'http://www.w3.org/2005/Atom',
+        'rss': 'http://purl.org/rss/1.0/',
+        'dc': 'http://purl.org/dc/elements/1.1/',
     }
 
     ergebnisse = []
+
+    # Prüfen, ob es sich um eine Sitemap, einen Atom-Feed oder einen RSS-Feed handelt
+    if root.tag.endswith('urlset'):  # Sitemap
+        for url in root.findall('ns:url', namespaces):
+            ergebnisse.append(verarbeite_sitemap_url(url, namespaces))
+    elif root.tag.endswith('feed'):  # Atom-Feed
+        for entry in root.findall('atom:entry', namespaces):
+            ergebnisse.append(verarbeite_atom_entry(entry, namespaces))
+    elif root.tag == 'rss':  # RSS-Feed
+        channel = root.find('channel')
+        if channel is not None:
+            for item in channel.findall('item'):
+                ergebnisse.append(verarbeite_rss_item(item, namespaces))
+
+    df = pd.DataFrame(ergebnisse)
+    return df
+
+def verarbeite_sitemap_url(url, namespaces):
+    loc_element = url.find('ns:loc', namespaces)
+    if loc_element is not None:
+        loc = loc_element.text
+        rubrik = extrahiere_rubrik(loc)
+        daten = {'loc': loc, 'rubrik': rubrik}
+        
+        news_element = url.find('news:news', namespaces)
+        if news_element is not None:
+            daten.update(extrahiere_news_daten(news_element, namespaces))
+        else:
+            daten.update(extrahiere_fallback_daten(url, namespaces))
+        
+        image_element = url.find('image:image', namespaces)
+        if image_element is not None:
+            daten.update(extrahiere_bild_daten(image_element, namespaces))
+        
+        return daten
+    return {}
+
+def verarbeite_atom_entry(entry, namespaces):
+    title = entry.find('atom:title', namespaces)
+    link = entry.find('atom:link[@rel="alternate"]', namespaces)
+    pub_date = entry.find('atom:published', namespaces) or entry.find('dc:date', namespaces)
+    summary = entry.find('atom:summary', namespaces)
+    
+    daten = {
+        'title': title.text if title is not None else None,
+        'loc': link.get('href') if link is not None else None,
+        'publication_date': pub_date.text if pub_date is not None else None,
+        'keywords': None,  # Atom feeds typically don't have keywords
+        'rubrik': extrahiere_rubrik(link.get('href') if link is not None else '')
+    }
+    
+    if summary is not None:
+        daten['description'] = summary.text
+    
+    return daten
+
+def verarbeite_rss_item(item, namespaces):
+    title = item.find('title')
+    link = item.find('link')
+    pub_date = item.find('pubDate')
+    description = item.find('description')
+    
+    daten = {
+        'title': title.text if title is not None else None,
+        'loc': link.text if link is not None else None,
+        'publication_date': pub_date.text if pub_date is not None else None,
+        'keywords': None,  # RSS feeds typically don't have keywords
+        'rubrik': extrahiere_rubrik(link.text if link is not None else '')
+    }
+    
+    if description is not None:
+        daten['description'] = description.text
+    
+    return daten
+
+def extrahiere_rubrik(loc):
+    parsed_url = urlparse(loc)
+    path_parts = parsed_url.path.strip('/').split('/')
+    rubrik = 'Unbekannt'
+    
+    for part in path_parts:
+        if part.lower() in BEKANNTE_KATEGORIEN:
+            rubrik = part.lower()
+            break
+    
+    if rubrik == 'Unbekannt' and len(path_parts) >= 1:
+        rubrik = path_parts[0].lower()
+    
+    return rubrik
+
+def extrahiere_news_daten(news_element, namespaces):
+    daten = {}
+    pub_date = news_element.find('news:publication_date', namespaces)
+    if pub_date is not None and pub_date.text:
+        daten['publication_date'] = pub_date.text
+    
+    publication = news_element.find('news:publication', namespaces)
+    if publication is not None:
+        name = publication.find('news:name', namespaces)
+        language = publication.find('news:language', namespaces)
+        if name is not None:
+            daten['name'] = name.text
+        if language is not None:
+            daten['language'] = language.text
+    
+    title = news_element.find('news:title', namespaces)
+    keywords = news_element.find('news:keywords', namespaces)
+    if title is not None:
+        daten['title'] = title.text
+    if keywords is not None:
+        daten['keywords'] = keywords.text
+    
+    return daten
+
+def extrahiere_fallback_daten(url, namespaces):
+    daten = {'publication_date': None, 'title': None, 'keywords': None, 'name': None, 'language': None}
+    lastmod_element = url.find('ns:lastmod', namespaces)
+    if lastmod_element is not None and lastmod_element.text:
+        daten['publication_date'] = lastmod_element.text
+    return daten
+
+def extrahiere_bild_daten(image_element, namespaces):
+    daten = {}
+    image_loc = image_element.find('image:loc', namespaces)
+    caption = image_element.find('image:caption', namespaces)
+    if image_loc is not None:
+        daten['image_loc'] = image_loc.text
+    if caption is not None:
+        daten['image_caption'] = caption.text
+    return daten
 
     for url in root.findall('ns:url', namespaces):
         loc_element = url.find('ns:loc', namespaces)
