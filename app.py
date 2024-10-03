@@ -93,18 +93,12 @@ def lade_einzelne_sitemap(xml_url):
 
     df = pd.DataFrame(ergebnisse)
     
-    # Create the category column using the improved extrahiere_rubriken function
-    df['rubriken'] = df['loc'].apply(extrahiere_rubriken)
-    df['category'] = df['rubriken'].apply(lambda x: ' > '.join(x) if x != ['Unbekannt'] else 'Unbekannt')
-    
-    return df
-
 def verarbeite_sitemap_url(url, namespaces):
     loc_element = url.find('ns:loc', namespaces)
     if loc_element is not None:
         loc = loc_element.text
-        rubriken = extrahiere_rubriken(loc)
-        daten = {'loc': loc, 'rubriken': rubriken}
+        category = ' > '.join(extrahiere_rubriken(loc))
+        daten = {'loc': loc, 'category': category}
 
         news_element = url.find('news:news', namespaces)
         if news_element is not None:
@@ -128,13 +122,13 @@ def verarbeite_atom_entry(entry, namespaces):
     summary = entry.find('atom:summary', namespaces)
 
     loc = link.get('href') if link is not None else None
-    rubriken = extrahiere_rubriken(loc if loc else '')
+    category = ' > '.join(extrahiere_rubriken(loc if loc else ''))
     daten = {
         'title': title.text if title is not None else None,
         'loc': loc,
         'publication_date': pub_date.text if pub_date is not None else None,
         'keywords': None,
-        'rubriken': rubriken
+        'category': category
     }
 
     if summary is not None:
@@ -149,13 +143,13 @@ def verarbeite_rss_item(item, namespaces):
     description = item.find('description')
 
     loc = link.text if link is not None else None
-    rubriken = extrahiere_rubriken(loc if loc else '')
+    category = ' > '.join(extrahiere_rubriken(loc if loc else ''))
     daten = {
         'title': title.text if title is not None else None,
         'loc': loc,
         'publication_date': pub_date.text if pub_date is not None else None,
         'keywords': None,
-        'rubriken': rubriken
+        'category': category
     }
 
     if description is not None:
@@ -278,7 +272,7 @@ def main():
     )
 
     if selected_categories:
-        df = df[df['category'].apply(lambda x: any(cat in x for cat in selected_categories))]
+        df = df[df['category'].apply(lambda x: any(cat.lower() in x.lower() for cat in selected_categories))]
 
     if df.empty:
         st.info("Keine Artikel gefunden. Bitte passen Sie die Filterkriterien an.")
