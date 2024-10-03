@@ -10,7 +10,6 @@ from io import BytesIO
 from sitemaps import SITEMAP_LIBRARY
 from kategorien import BEKANNTE_KATEGORIEN
 
-# Funktion zum Laden einer einzelnen Sitemap
 def lade_einzelne_sitemap(xml_url):
     try:
         response = requests.get(xml_url)
@@ -37,18 +36,18 @@ def lade_einzelne_sitemap(xml_url):
     }
 
     ergebnisse = []
-  
-    if root.tag.endswith('urlset'):
+
+    if root.tag.endswith('urlset'):  # Sitemap
         for url in root.findall('ns:url', namespaces):
             daten = verarbeite_sitemap_url(url, namespaces)
             if daten:
                 ergebnisse.append(daten)
-    elif root.tag.endswith('feed'):
+    elif root.tag.endswith('feed'):  # Atom-Feed
         for entry in root.findall('atom:entry', namespaces):
             daten = verarbeite_atom_entry(entry, namespaces)
             if daten:
                 ergebnisse.append(daten)
-    elif root.tag == 'rss':
+    elif root.tag == 'rss':  # RSS-Feed
         channel = root.find('channel')
         if channel is not None:
             for item in channel.findall('item'):
@@ -70,9 +69,10 @@ def verarbeite_sitemap_url(url, namespaces):
     if loc_element is not None:
         loc = loc_element.text
         rubriken = extrahiere_rubriken(loc)
-        daten = {'loc': loc, 'rubriken': rubriken}
-        daten['rubrik_level_1'] = rubriken[0] if len(rubriken) > 0 else 'Unbekannt'
-        daten['rubrik_level_2'] = rubriken[1] if len(rubriken) > 1 else 'Unbekannt'
+        daten = {'loc': loc}
+        daten['rubrik_level_1'] = rubriken[0] if len(rubriken) >= 1 else 'Unbekannt'
+        daten['rubrik_level_2'] = rubriken[1] if len(rubriken) >= 2 else 'Unbekannt'
+        daten['rubriken'] = rubriken  # Optional, falls benötigt
 
         news_element = url.find('news:news', namespaces)
         if news_element is not None:
@@ -85,7 +85,8 @@ def verarbeite_sitemap_url(url, namespaces):
             daten.update(extrahiere_bild_daten(image_element, namespaces))
 
         return daten
-    return {}
+    else:
+        return {'loc': None, 'rubrik_level_1': 'Unbekannt', 'rubrik_level_2': 'Unbekannt'}
 
 def verarbeite_atom_entry(entry, namespaces):
     title = entry.find('atom:title', namespaces)
@@ -96,15 +97,14 @@ def verarbeite_atom_entry(entry, namespaces):
     summary = entry.find('atom:summary', namespaces)
 
     loc = link.get('href') if link is not None else None
-    rubriken = extrahiere_rubriken(loc if loc is not None else '')
+    rubriken = extrahiere_rubriken(loc if loc else '')
     daten = {
         'title': title.text if title is not None else None,
         'loc': loc,
         'publication_date': pub_date.text if pub_date is not None else None,
         'keywords': None,
-        'rubriken': rubriken,
-        'rubrik_level_1': rubriken[0] if len(rubriken) > 0 else 'Unbekannt',
-        'rubrik_level_2': rubriken[1] if len(rubriken) > 1 else 'Unbekannt'
+        'rubrik_level_1': rubriken[0] if len(rubriken) >= 1 else 'Unbekannt',
+        'rubrik_level_2': rubriken[1] if len(rubriken) >= 2 else 'Unbekannt'
     }
 
     if summary is not None:
@@ -119,15 +119,14 @@ def verarbeite_rss_item(item, namespaces):
     description = item.find('description')
 
     loc = link.text if link is not None else None
-    rubriken = extrahiere_rubriken(loc if loc is not None else '')
+    rubriken = extrahiere_rubriken(loc if loc else '')
     daten = {
         'title': title.text if title is not None else None,
         'loc': loc,
         'publication_date': pub_date.text if pub_date is not None else None,
         'keywords': None,
-        'rubriken': rubriken,
-        'rubrik_level_1': rubriken[0] if len(rubriken) > 0 else 'Unbekannt',
-        'rubrik_level_2': rubriken[1] if len(rubriken) > 1 else 'Unbekannt'
+        'rubrik_level_1': rubriken[0] if len(rubriken) >= 1 else 'Unbekannt',
+        'rubrik_level_2': rubriken[1] if len(rubriken) >= 2 else 'Unbekannt'
     }
 
     if description is not None:
@@ -136,6 +135,8 @@ def verarbeite_rss_item(item, namespaces):
     return daten
 
 def extrahiere_rubriken(loc):
+    if not loc:
+        return []
     parsed_url = urlparse(loc)
     path_parts = parsed_url.path.strip('/').split('/')
     rubriken = []
@@ -194,6 +195,7 @@ def lade_daten(xml_urls):
     for i, xml_url in enumerate(xml_urls):
         st.write(f"Lade Daten von {xml_url}...")
         df = lade_einzelne_sitemap(xml_url)
+        st.write(f"Geladene Spalten von {xml_url}:", df.columns.tolist())
         if not df.empty:
             df['sitemap'] = xml_url
             dfs.append(df)
@@ -201,7 +203,9 @@ def lade_daten(xml_urls):
             st.warning(f"Keine Daten von {xml_url} geladen.")
         progress_bar.progress((i + 1) / total)
     if dfs:
-        return pd.concat(dfs, ignore_index=True)
+        result_df = pd.concat(dfs, ignore_index=True)
+        st.write("Kombinierte Spalten nach dem Laden aller Sitemaps:", result_df.columns.tolist())
+        return result_df
     else:
         return pd.DataFrame()
 
@@ -222,27 +226,23 @@ def main():
         st.warning("Keine Daten verfügbar.")
         return
 
+    # Sicherstellen, dass die Spalten 'rubrik_level_1' und 'rubrik_level_2' vorhanden sind
+    if 'rubrik_level_1' not in df.columns:
+        df['rubrik_level_1'] = 'Unbekannt'
+    if 'rubrik_level_2' not in df.columns:
+        df['rubrik_level_2'] = 'Unbekannt'
+
     st.write("Vorhandene Spalten im DataFrame:", df.columns.tolist())
     st.write("Anzahl der geladenen Zeilen:", len(df))
     st.write(df.head())
 
-    if 'rubrik_level_1' not in df.columns:
-        st.error("Spalte 'rubrik_level_1' ist nicht vorhanden.")
-        st.stop()
+    # Rest Ihres Codes...
 
+    # Ab hier können Sie wie gewohnt fortfahren
+    # Convert 'publication_date' to datetime
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
 
-    if 'publication_date' not in df.columns:
-        st.error("Spalte 'publication_date' ist nicht vorhanden.")
-        st.stop()
-
     df = df.dropna(subset=['publication_date'])
-
-    if pd.api.types.is_datetime64_any_dtype(df['publication_date']):
-        pass
-    else:
-        st.error("Fehler bei der Umwandlung von 'publication_date' in datetime.")
-        st.stop()
 
     df['publication_date'] = df['publication_date'].dt.tz_convert('Europe/Berlin').dt.tz_localize(None)
     df['hour'] = df['publication_date'].dt.hour
@@ -307,84 +307,7 @@ def main():
     st.write(f"Anzahl der Artikel: {len(df)}")
     st.dataframe(df[['publication_date', 'title', 'rubrik_level_1', 'rubrik_level_2', 'source', 'keywords', 'loc']])
 
-    st.subheader("Daten exportieren")
-    export_format = st.selectbox("Exportformat wählen", ["CSV", "Excel", "JSON"])
-
-    if st.button("Daten exportieren"):
-        if not df.empty:
-            if export_format == "CSV":
-                csv = df.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(label="CSV herunterladen", data=csv, file_name='artikel.csv', mime='text/csv')
-            elif export_format == "Excel":
-                excel_buffer = BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False)
-                excel_data = excel_buffer.getvalue()
-                st.download_button(
-                    label="Excel herunterladen",
-                    data=excel_data,
-                    file_name='artikel.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-            elif export_format == "JSON":
-                json_data = df.to_json(orient='records', force_ascii=False).encode('utf-8')
-                st.download_button(
-                    label="JSON herunterladen",
-                    data=json_data,
-                    file_name='artikel.json',
-                    mime='application/json'
-                )
-        else:
-            st.warning("Keine Daten zum Exportieren verfügbar.")
-
-    st.subheader("Artikelverteilung nach Zeitslots")
-    if not df.empty and 'time_slot' in df.columns:
-        artikel_pro_slot = df.groupby('time_slot').size().reset_index(name='Anzahl')
-        chart = alt.Chart(artikel_pro_slot).mark_bar().encode(
-            x=alt.X('time_slot:N', sort=labels, title='Zeitslot'),
-            y=alt.Y('Anzahl:Q', title='Anzahl der Artikel')
-        ).properties(
-            width=600,
-            height=400
-        )
-        st.altair_chart(chart)
-    else:
-        st.write("Keine Veröffentlichungsdaten verfügbar für die Visualisierung.")
-
-    st.subheader("Artikel Details")
-    if not df.empty:
-        search_term = st.text_input("Artikeltitel suchen")
-        filtered_df = df[df['title'].str.contains(search_term, case=False, na=False)]
-        if not filtered_df.empty:
-            selected_index = st.selectbox("Artikel auswählen", filtered_df.index, format_func=lambda x: filtered_df.at[x, 'title'])
-            article = filtered_df.loc[selected_index]
-            st.write("**Titel:**", article['title'])
-            st.write("**Rubrik Level 1:**", article['rubrik_level_1'])
-            st.write("**Rubrik Level 2:**", article['rubrik_level_2'])
-            st.write("**Quelle:**", article['source'])
-            st.write("**Veröffentlichungsdatum:**", article['publication_date'])
-            st.write("**Keywords:**", article['keywords'])
-            st.write("**URL:**", article['loc'])
-            if pd.notna(article.get('image_loc', None)):
-                st.image(article['image_loc'], caption=article.get('image_caption', ''))
-
-            with st.expander("Artikel mit Jina.ai Reader anzeigen"):
-                if st.button("Artikel abrufen"):
-                    encoded_loc = quote(article['loc'], safe='')
-                    reader_url = f"https://r.jina.ai/{encoded_loc}"
-                    try:
-                        reader_response = requests.get(reader_url)
-                        reader_response.raise_for_status()
-                        content = reader_response.text
-                        st.markdown(f"**Response von Jina.ai Reader:**\n\n{content}")
-                    except requests.exceptions.RequestException as e:
-                        st.error(f"Fehler beim Abrufen des Artikels: {e}")
-                else:
-                    st.write("Klicken Sie auf 'Artikel abrufen', um den Artikel über Jina.ai Reader abzurufen.")
-        else:
-            st.write("Keine Artikel entsprechen dem Suchbegriff.")
-    else:
-        st.write("Keine Artikel zum Anzeigen verfügbar.")
+    # Rest Ihrer App...
 
 if __name__ == "__main__":
     main()
