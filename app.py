@@ -37,27 +37,31 @@ def lade_einzelne_sitemap(xml_url):
     }
 
     ergebnisse = []
-
-    if root.tag.endswith('urlset'):  # Sitemap
+  
+    if root.tag.endswith('urlset'):
         for url in root.findall('ns:url', namespaces):
             daten = verarbeite_sitemap_url(url, namespaces)
             if daten:
                 ergebnisse.append(daten)
-    elif root.tag.endswith('feed'):  # Atom-Feed
+    elif root.tag.endswith('feed'):
         for entry in root.findall('atom:entry', namespaces):
             daten = verarbeite_atom_entry(entry, namespaces)
             if daten:
                 ergebnisse.append(daten)
-    elif root.tag == 'rss':  # RSS-Feed
+    elif root.tag == 'rss':
         channel = root.find('channel')
         if channel is not None:
             for item in channel.findall('item'):
                 daten = verarbeite_rss_item(item, namespaces)
                 if daten:
                     ergebnisse.append(daten)
+    else:
+        st.warning(f"Unbekanntes Root-Tag {root.tag} in {xml_url}")
 
-    # Entfernen von leeren Ergebnissen
-    ergebnisse = [item for item in ergebnisse if item]
+    if not ergebnisse:
+        st.warning(f"Keine Einträge in der Sitemap von {xml_url} gefunden.")
+        return pd.DataFrame()
+
     df = pd.DataFrame(ergebnisse)
     return df
 
@@ -217,6 +221,14 @@ def main():
     if df.empty:
         st.warning("Keine Daten verfügbar.")
         return
+
+    st.write("Vorhandene Spalten im DataFrame:", df.columns.tolist())
+    st.write("Anzahl der geladenen Zeilen:", len(df))
+    st.write(df.head())
+
+    if 'rubrik_level_1' not in df.columns:
+        st.error("Spalte 'rubrik_level_1' ist nicht vorhanden.")
+        st.stop()
 
     df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce', utc=True)
 
