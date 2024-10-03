@@ -4,7 +4,7 @@ SITEMAP_LIBRARY = {
     'Spiegel.de News Sitemap': 'https://www.spiegel.de/sitemaps/news-de.xml',
     'Focus.de Politik News Sitemap': 'https://www.focus.de/sitemap_news_politik.xml',
     'Bild.de News Sitemap': 'https://www.bild.de/sitemap-news.xml',
-    'Tagesschau.de Sitemap': 'https://www.tagesschau.de/index~atom.xml',
+    'Tagesschau.de RSS Feed': 'https://www.tagesschau.de/index~rss2.xml',
     'T-Online.de RSS Feed': 'https://www.t-online.de/schlagzeilen/feed.rss'
     # Fügen Sie hier weitere Sitemaps hinzu
 }
