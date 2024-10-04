@@ -192,13 +192,17 @@ def main():
     unique_categories = [cat for cat, _ in sorted_categories]
 
     # Filters
-    category_filter = st.multiselect('Select Categories:', options=unique_categories, default=unique_categories)
+    category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
     keyword_filter = st.text_input('Enter Keywords or Title (comma separated):')
 
     # Filter DataFrame based on user input
     filtered_df = df.copy()
     if category_filter:
-        filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
+        category_logic = st.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
+        if category_logic == 'OR':
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
+        elif category_logic == 'AND':
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: all(cat in x for cat in category_filter))]
     if keyword_filter:
         keywords_list = [kw.strip() for kw in keyword_filter.split(',')]
         filtered_df = filtered_df[filtered_df.apply(lambda row: any(kw.lower() in row['Keywords'].lower() or kw.lower() in row['Title'].lower() for kw in keywords_list), axis=1)]
