@@ -82,6 +82,47 @@ def determine_feed_type(feed_url):
     except:
         return 'sitemap'
 
+def extract_categories(url):
+    try:
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        parts = [part for part in path.split('/') if part]
+        potential_categories = parts[:-1]
+        non_category_patterns = [
+            r'^article\d+$',
+            r'^plus\d+$',
+            r'^amp\d+$',
+            r'^content\d+$',
+            r'^rss\d+$',
+            r'^id_\d+$'
+        ]
+        compiled_patterns = [re.compile(pattern) for pattern in non_category_patterns]
+        categories = [cat for cat in potential_categories if not any(pattern.match(cat) for pattern in compiled_patterns)]
+        return categories
+    except Exception as e:
+        st.error(f"Error parsing URL {url}: {e}")
+        return []
+
+def normalize_categories(categories):
+    normalization_rules = {
+        'regional': ['region', 'regionales', 'regional'],
+        'wirtschaft': ['economy', 'wirtschaft'],
+        'politik': ['politics', 'politik'],
+        'ausland': ['international', 'ausland'],
+        'sport': ['sports', 'sport']
+    }
+    normalized = []
+    for cat in categories:
+        found = False
+        for key, synonyms in normalization_rules.items():
+            if cat.lower() in [syn.lower() for syn in synonyms]:
+                normalized.append(key)
+                found = True
+                break
+        if not found:
+            normalized.append(cat.lower())
+    return normalized
+
 def main():
     st.title('News Feed Aggregator')
 
@@ -100,7 +141,8 @@ def main():
                     'Title': article['title'],
                     'Description': article['description'],
                     'Keywords': ', '.join(article['keywords']),
-                    'Publication_Date': article['publication_date']
+                    'Publication_Date': article['publication_date'],
+                    'Categories': normalize_categories(extract_categories(article['link']))
                 })
         else:
             sitemap_entries = extract_urls_from_sitemap(feed_url)
@@ -111,20 +153,24 @@ def main():
                     'Title': entry['news_title'],
                     'Description': '',
                     'Keywords': ', '.join(entry['keywords']),
-                    'Publication_Date': entry['publication_date']
+                    'Publication_Date': entry['publication_date'],
+                    'Categories': normalize_categories(extract_categories(entry['loc']))
                 })
     
     # Create a DataFrame from all_articles
     df = pd.DataFrame(all_articles)
 
+    # Extract unique categories
+    unique_categories = sorted(set(cat for cats in df['Categories'] for cat in cats))
+
     # Filters
-    category_filter = st.selectbox('Select Category:', options=['All'] + df['Feed'].unique().tolist(), index=0)
+    category_filter = st.selectbox('Select Category:', options=['All'] + unique_categories, index=0)
     keyword_filter = st.text_input('Enter Keyword:')
 
     # Filter DataFrame based on user input
     filtered_df = df.copy()
     if category_filter != 'All':
-        filtered_df = filtered_df[filtered_df['Feed'] == category_filter]
+        filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: category_filter in x)]
     if keyword_filter:
         filtered_df = filtered_df[filtered_df['Keywords'].str.contains(keyword_filter, case=False, na=False)]
 
