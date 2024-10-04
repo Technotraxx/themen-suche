@@ -9,7 +9,7 @@ from collections import defaultdict
 import base64
 import streamlit as st
 import cachetools.func
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Define the feeds
 feeds = {
@@ -31,7 +31,7 @@ def extract_urls_from_rss(feed_url):
             keywords = [tag.term for tag in entry.tags if 'term' in tag] if 'tags' in entry else []
             publication_date = entry.published if 'published' in entry else entry.updated if 'updated' in entry else ''
             try:
-                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z")
+                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
             except ValueError:
                 pub_date = None
             news_title = entry.title if 'title' in entry else ''
@@ -206,75 +206,4 @@ def main():
     filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
 
     # Display results
-    st.write(f"Number of articles found: {len(filtered_df)}")
-    st.dataframe(filtered_df)
-
-    # Download filtered CSV
-    if not filtered_df.empty:
-        csv = filtered_df.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:text/csv;base64,{b64}" download="filtered_articles.csv">Download CSV</a>'
-        st.markdown(href, unsafe_allow_html=True)
-
-    # Add charts to visualize the data
-    st.subheader("Visual Insights")
-    # Bar chart for the Top 25 Categories by number of articles
-    top_25_categories = sorted_categories[:25]
-    category_names, category_counts = zip(*top_25_categories)
-    st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories'))
-
-    # Line chart showing Number of Articles Over Time by publication date
-    if not filtered_df.empty:
-        articles_over_time = filtered_df['Publication_Date'].dt.date.value_counts().sort_index()
-        st.line_chart(articles_over_time)
-
-    # Pie chart representing the Distribution of Feeds
-    feed_counts = filtered_df['Feed'].value_counts()
-    st.write("Distribution of Feeds")
-    st.write(feed_counts)
-    st.pyplot(feed_counts.plot.pie(autopct='%1.1f%%', figsize=(5, 5)).get_figure())
-    st.title('News Feed Aggregator')
-
-    # Get all articles and create a DataFrame
-    df, log_messages = get_all_articles()
-
-    # Display log messages in the sidebar
-    st.sidebar.title("Processing Log")
-    for message in log_messages:
-        st.sidebar.write(message)
-
-    # Extract unique categories and sort them by the number of items
-    category_counts = defaultdict(int)
-    for cats in df['Categories']:
-        for cat in cats:
-            category_counts[cat] += 1
-    sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
-    unique_categories = [cat for cat, _ in sorted_categories]
-
-    # Filters
-    category_filter = st.selectbox('Select Category:', options=['All'] + unique_categories, index=0)
-    keyword_filter = st.text_input('Enter Keyword:')
-
-    # Filter DataFrame based on user input
-    filtered_df = df.copy()
-    if category_filter != 'All':
-        filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: category_filter in x)]
-    if keyword_filter:
-        filtered_df = filtered_df[filtered_df['Keywords'].str.contains(keyword_filter, case=False, na=False)]
-
-    # Sort the DataFrame by the newest publication date
-    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
-
-    # Display results
-    st.write(f"Number of articles found: {len(filtered_df)}")
-    st.dataframe(filtered_df)
-
-    # Download filtered CSV
-    if not filtered_df.empty:
-        csv = filtered_df.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:text/csv;base64,{b64}" download="filtered_articles.csv">Download CSV</a>'
-        st.markdown(href, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+    st.write(f"Number of articles fo
