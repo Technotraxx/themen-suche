@@ -31,7 +31,7 @@ def extract_urls_from_rss(feed_url):
             keywords = [tag.term for tag in entry.tags if 'term' in tag] if 'tags' in entry else []
             publication_date = entry.published if 'published' in entry else entry.updated if 'updated' in entry else ''
             try:
-                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc).astimezone(timezone.utc).replace(tzinfo=None)
             except ValueError:
                 pub_date = None
             news_title = entry.title if 'title' in entry else ''
@@ -66,7 +66,7 @@ def extract_urls_from_sitemap(feed_url):
             pub_date_elem = url.find('news:news/news:publication_date', namespaces=namespace)
             publication_date = pub_date_elem.text if pub_date_elem is not None and pub_date_elem.text else ''
             try:
-                pub_date = datetime.fromisoformat(publication_date.replace("Z", "+00:00"))
+                pub_date = datetime.fromisoformat(publication_date.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
             except ValueError:
                 pub_date = None
             news_title_elem = url.find('news:news/news:title', namespaces=namespace)
@@ -206,4 +206,33 @@ def main():
     filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
 
     # Display results
-    st.write(f"Number of articles fo
+    st.write(f"Number of articles found: {len(filtered_df)}")
+    st.dataframe(filtered_df)
+
+    # Download filtered CSV
+    if not filtered_df.empty:
+        csv = filtered_df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:text/csv;base64,{b64}" download="filtered_articles.csv">Download CSV</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
+    # Add charts to visualize the data
+    st.subheader("Visual Insights")
+    # Bar chart for the Top 25 Categories by number of articles
+    top_25_categories = sorted_categories[:25]
+    category_names, category_counts = zip(*top_25_categories)
+    st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories'))
+
+    # Line chart showing Number of Articles Over Time by publication date
+    if not filtered_df.empty:
+        articles_over_time = filtered_df['Publication_Date'].dt.date.value_counts().sort_index()
+        st.line_chart(articles_over_time)
+
+    # Pie chart representing the Distribution of Feeds
+    feed_counts = filtered_df['Feed'].value_counts()
+    st.write("Distribution of Feeds")
+    st.write(feed_counts)
+    st.pyplot(feed_counts.plot.pie(autopct='%1.1f%%', figsize=(5, 5)).get_figure())
+
+if __name__ == "__main__":
+    main()
