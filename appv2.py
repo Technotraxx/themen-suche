@@ -118,6 +118,33 @@ def extract_categories(url):
         return []
 
 def normalize_categories(categories):
+    # Extend normalization for regional categories with specific counties and states
+    regional_locations = [
+    'hessen', 'luebeck', 'muenchen', 'leipzig', 'berlin', 'berlin-brandenburg',
+    'sachsen', 'nordrhein-westfalen', 'nrw', 'essen', 'schleswig-holstein', 'hamburg',
+    'rostock', 'mecklenburg-vorpommern', 'baden-wuerttemberg', 'koeln', 'thueringen',
+    'braunschweig', 'niedersachsen', 'bremen', 'nuernberg', 'bayern'
+]
+
+# Define German states and the 10 biggest cities
+states_of_germany = [
+    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+]
+
+biggest_cities_germany = [
+    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+    'essen', 'duesseldorf', 'bremen'
+]
+    
+    normalization_rules = {
+        'regional': ['region', 'regionales', 'regional'] + regional_locations,
+        'wirtschaft': ['economy', 'wirtschaft'],
+        'politik': ['politics', 'politik'],
+        'ausland': ['international', 'ausland'],
+        'sport': ['sports', 'sport']
+    }
     normalization_rules = {
         'regional': ['region', 'regionales', 'regional'],
         'wirtschaft': ['economy', 'wirtschaft'],
@@ -190,19 +217,23 @@ def main():
             category_counts[cat] += 1
     sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
     unique_categories = [cat for cat, _ in sorted_categories]
+    regional_filter = [cat for cat in unique_categories if cat.startswith('regional')]
+    top_locations = [loc for loc in regional_filter if loc in regional_locations]
+    regional_options = states_of_germany + biggest_cities_germany
 
     # Filters
     category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
+    location_filter = st.multiselect('Select Regional Locations (States and Cities):', options=regional_options, default=[])
     keyword_filter = st.text_input('Enter Keywords or Title (comma separated):')
 
     # Filter DataFrame based on user input
     filtered_df = df.copy()
-    if category_filter:
+    if category_filter or location_filter:
         category_logic = st.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
         if category_logic == 'OR':
-            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter) or any(loc in x for loc in location_filter))]
         elif category_logic == 'AND':
-            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: all(cat in x for cat in category_filter))]
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: all(cat in x for cat in category_filter) and all(loc in x for loc in location_filter))]
     if keyword_filter:
         keywords_list = [kw.strip() for kw in keyword_filter.split(',')]
         filtered_df = filtered_df[filtered_df.apply(lambda row: any(kw.lower() in row['Keywords'].lower() or kw.lower() in row['Title'].lower() for kw in keywords_list), axis=1)]
