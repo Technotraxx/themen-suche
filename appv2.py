@@ -9,6 +9,7 @@ from collections import defaultdict
 import base64
 import streamlit as st
 import cachetools.func
+from datetime import datetime
 
 # Define the feeds
 feeds = {
@@ -29,13 +30,17 @@ def extract_urls_from_rss(feed_url):
         for entry in feed.entries:
             keywords = [tag.term for tag in entry.tags if 'term' in tag] if 'tags' in entry else []
             publication_date = entry.published if 'published' in entry else entry.updated if 'updated' in entry else ''
+            try:
+                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z")
+            except ValueError:
+                pub_date = None
             news_title = entry.title if 'title' in entry else ''
             articles.append({
                 'link': entry.link,
                 'title': news_title,
                 'description': entry.description if 'description' in entry else '',
                 'keywords': keywords,
-                'publication_date': publication_date
+                'publication_date': pub_date
             })
         return articles
     except Exception as e:
@@ -60,12 +65,16 @@ def extract_urls_from_sitemap(feed_url):
             keywords = [kw.strip().lower() for kw in keywords_elem.text.split(',')] if keywords_elem is not None and keywords_elem.text else []
             pub_date_elem = url.find('news:news/news:publication_date', namespaces=namespace)
             publication_date = pub_date_elem.text if pub_date_elem is not None and pub_date_elem.text else ''
+            try:
+                pub_date = datetime.fromisoformat(publication_date.replace("Z", "+00:00"))
+            except ValueError:
+                pub_date = None
             news_title_elem = url.find('news:news/news:title', namespaces=namespace)
             news_title = news_title_elem.text if news_title_elem is not None and news_title_elem.text else ''
             urls.append({
                 'loc': loc_text,
                 'keywords': keywords,
-                'publication_date': publication_date,
+                'publication_date': pub_date,
                 'news_title': news_title
             })
         return urls
@@ -192,6 +201,9 @@ def main():
         filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: category_filter in x)]
     if keyword_filter:
         filtered_df = filtered_df[filtered_df['Keywords'].str.contains(keyword_filter, case=False, na=False)]
+
+    # Sort the DataFrame by the newest publication date
+    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
 
     # Display results
     st.write(f"Number of articles found: {len(filtered_df)}")
