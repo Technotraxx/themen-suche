@@ -217,3 +217,47 @@ def main():
     # Filters
     category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
     location_filter = st.multiselect('Select Regional Locations (States and Cities):', options=regional_options, default=[])
+
+    # Apply filters
+    filtered_df = df.copy()
+    if category_filter or location_filter:
+        category_logic = st.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
+        if category_logic == 'OR':
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter) or any(loc in x for loc in location_filter))]
+        elif category_logic == 'AND':
+            filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: all(cat in x for cat in category_filter) and all(loc in x for loc in location_filter))]
+
+    # Sort the DataFrame by the newest publication date
+    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
+
+    # Display results
+    st.write(f"Number of articles found: {len(filtered_df)}")
+    st.dataframe(filtered_df)
+
+    # Download filtered CSV
+    if not filtered_df.empty:
+        csv = filtered_df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:text/csv;base64,{b64}" download="filtered_articles.csv">Download CSV</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
+    # Add charts to visualize the data
+    st.subheader("Visual Insights")
+    # Bar chart for the Top 25 Categories by number of articles (sorted highest to lowest)
+    top_25_categories = sorted_categories[:25]
+    category_names, category_counts = zip(*top_25_categories)
+    st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories').sort_values(by='Count', ascending=False))
+
+    # Bar chart showing the number of articles published during each hour of the day
+    if not filtered_df.empty:
+        filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
+        articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
+        st.bar_chart(articles_per_hour)
+
+    # Display table representing the Distribution of Feeds
+    feed_counts = filtered_df['Feed'].value_counts()
+    st.write("Distribution of Feeds")
+    st.write(feed_counts)
+
+if __name__ == "__main__":
+    main()
