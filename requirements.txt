@@ -3,3 +3,4 @@ pandas
 streamlit
 altair
 feedparser
+lxml==4.6.3
