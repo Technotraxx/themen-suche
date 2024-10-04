@@ -216,4 +216,4 @@ def main():
 
     # Filters
     category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
-    location_filter = st.multiselect('Select Regional
+    location_filter = st.multiselect('Select Regional Locations (States and Cities):', options=regional_options, default=[])
