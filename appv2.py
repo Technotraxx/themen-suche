@@ -117,15 +117,15 @@ def extract_categories(url):
         st.error(f"Error parsing URL {url}: {e}")
         return []
 
-def normalize_categories(categories):
-    # Extend normalization for regional categories with specific counties and states
-    regional_locations = [
-        'hessen', 'luebeck', 'muenchen', 'leipzig', 'berlin', 'berlin-brandenburg',
-        'sachsen', 'nordrhein-westfalen', 'nrw', 'essen', 'schleswig-holstein', 'hamburg',
-        'rostock', 'mecklenburg-vorpommern', 'baden-wuerttemberg', 'koeln', 'thueringen',
-        'braunschweig', 'niedersachsen', 'bremen', 'nuernberg', 'bayern'
-    ]
+# Extend normalization for regional categories with specific counties and states
+regional_locations = [
+    'hessen', 'luebeck', 'muenchen', 'leipzig', 'berlin', 'berlin-brandenburg',
+    'sachsen', 'nordrhein-westfalen', 'nrw', 'essen', 'schleswig-holstein', 'hamburg',
+    'rostock', 'mecklenburg-vorpommern', 'baden-wuerttemberg', 'koeln', 'thueringen',
+    'braunschweig', 'niedersachsen', 'bremen', 'nuernberg', 'bayern'
+]
 
+def normalize_categories(categories):
     # Define German states and the 10 biggest cities
     states_of_germany = [
         'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
