@@ -193,14 +193,15 @@ def main():
 
     # Filters
     category_filter = st.multiselect('Select Categories:', options=unique_categories, default=unique_categories)
-    keyword_filter = st.text_input('Enter Keyword:')
+    keyword_filter = st.text_input('Enter Keywords or Title (comma separated):')
 
     # Filter DataFrame based on user input
     filtered_df = df.copy()
     if category_filter:
         filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
     if keyword_filter:
-        filtered_df = filtered_df[filtered_df['Keywords'].str.contains(keyword_filter, case=False, na=False)]
+        keywords_list = [kw.strip() for kw in keyword_filter.split(',')]
+        filtered_df = filtered_df[filtered_df.apply(lambda row: any(kw.lower() in row['Keywords'].lower() or kw.lower() in row['Title'].lower() for kw in keywords_list), axis=1)]
 
     # Sort the DataFrame by the newest publication date
     filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
