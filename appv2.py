@@ -7,6 +7,8 @@ import pandas as pd
 import re
 from collections import defaultdict
 import base64
+import streamlit as st
+import cachetools.func
 
 # Define the feeds
 feeds = {
@@ -19,6 +21,7 @@ feeds = {
     'T-Online.de RSS Feed': 'https://www.t-online.de/schlagzeilen/feed.rss'
 }
 
+@cachetools.func.ttl_cache(maxsize=100, ttl=3600)
 def extract_urls_from_rss(feed_url):
     try:
         feed = feedparser.parse(feed_url)
@@ -39,6 +42,7 @@ def extract_urls_from_rss(feed_url):
         st.error(f"Error parsing RSS feed {feed_url}: {e}")
         return []
 
+@cachetools.func.ttl_cache(maxsize=100, ttl=3600)
 def extract_urls_from_sitemap(feed_url):
     try:
         response = requests.get(feed_url)
@@ -69,6 +73,7 @@ def extract_urls_from_sitemap(feed_url):
         st.error(f"Error parsing Sitemap {feed_url}: {e}")
         return []
 
+@cachetools.func.ttl_cache(maxsize=100, ttl=3600)
 def determine_feed_type(feed_url):
     try:
         feed = feedparser.parse(feed_url)
@@ -123,10 +128,8 @@ def normalize_categories(categories):
             normalized.append(cat.lower())
     return normalized
 
-def main():
-    st.title('News Feed Aggregator')
-
-    # Extract all article URLs and metadata from all feeds
+@st.cache_data(ttl=3600)
+def get_all_articles():
     all_articles = []
     for feed_name, feed_url in feeds.items():
         feed_type = determine_feed_type(feed_url)
@@ -156,9 +159,13 @@ def main():
                     'Publication_Date': entry['publication_date'],
                     'Categories': normalize_categories(extract_categories(entry['loc']))
                 })
-    
-    # Create a DataFrame from all_articles
-    df = pd.DataFrame(all_articles)
+    return pd.DataFrame(all_articles)
+
+def main():
+    st.title('News Feed Aggregator')
+
+    # Get all articles and create a DataFrame
+    df = get_all_articles()
 
     # Extract unique categories
     unique_categories = sorted(set(cat for cats in df['Categories'] for cat in cats))
