@@ -31,7 +31,7 @@ def extract_urls_from_rss(feed_url):
             keywords = [tag.term for tag in entry.tags if 'term' in tag] if 'tags' in entry else []
             publication_date = entry.published if 'published' in entry else entry.updated if 'updated' in entry else ''
             try:
-                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc).astimezone(timezone.utc).replace(tzinfo=None)
+                pub_date = datetime.strptime(publication_date, "%a, %d %b %Y %H:%M:%S %Z").astimezone(timezone.utc).replace(tzinfo=None)
             except ValueError:
                 pub_date = None
             news_title = entry.title if 'title' in entry else ''
@@ -218,21 +218,21 @@ def main():
 
     # Add charts to visualize the data
     st.subheader("Visual Insights")
-    # Bar chart for the Top 25 Categories by number of articles
+    # Bar chart for the Top 25 Categories by number of articles (sorted highest to lowest)
     top_25_categories = sorted_categories[:25]
     category_names, category_counts = zip(*top_25_categories)
-    st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories'))
+    st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories').sort_values(by='Count', ascending=False))
 
-    # Line chart showing Number of Articles Over Time by publication date
+    # Bar chart showing the number of articles published during each hour of the day
     if not filtered_df.empty:
-        articles_over_time = filtered_df['Publication_Date'].dt.date.value_counts().sort_index()
-        st.line_chart(articles_over_time)
+        filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
+        articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
+        st.bar_chart(articles_per_hour)
 
-    # Pie chart representing the Distribution of Feeds
+    # Display table representing the Distribution of Feeds
     feed_counts = filtered_df['Feed'].value_counts()
     st.write("Distribution of Feeds")
     st.write(feed_counts)
-    st.pyplot(feed_counts.plot.pie(autopct='%1.1f%%', figsize=(5, 5)).get_figure())
 
 if __name__ == "__main__":
     main()
