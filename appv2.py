@@ -192,13 +192,13 @@ def main():
     unique_categories = [cat for cat, _ in sorted_categories]
 
     # Filters
-    category_filter = st.selectbox('Select Category:', options=['All'] + unique_categories, index=0)
+    category_filter = st.multiselect('Select Categories:', options=unique_categories, default=unique_categories)
     keyword_filter = st.text_input('Enter Keyword:')
 
     # Filter DataFrame based on user input
     filtered_df = df.copy()
-    if category_filter != 'All':
-        filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: category_filter in x)]
+    if category_filter:
+        filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
     if keyword_filter:
         filtered_df = filtered_df[filtered_df['Keywords'].str.contains(keyword_filter, case=False, na=False)]
 
