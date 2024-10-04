@@ -131,9 +131,11 @@ def normalize_categories(categories):
 @st.cache_data(ttl=3600)
 def get_all_articles():
     all_articles = []
+    log_messages = []
     for feed_name, feed_url in feeds.items():
         feed_type = determine_feed_type(feed_url)
-        st.write(f"Processing '{feed_name}' as {feed_type.upper()}...")
+        log_message = f"Processing '{feed_name}' as {feed_type.upper()}..."
+        log_messages.append(log_message)
         
         if feed_type == 'rss':
             articles = extract_urls_from_rss(feed_url)
@@ -159,16 +161,26 @@ def get_all_articles():
                     'Publication_Date': entry['publication_date'],
                     'Categories': normalize_categories(extract_categories(entry['loc']))
                 })
-    return pd.DataFrame(all_articles)
+    return pd.DataFrame(all_articles), log_messages
 
 def main():
     st.title('News Feed Aggregator')
 
     # Get all articles and create a DataFrame
-    df = get_all_articles()
+    df, log_messages = get_all_articles()
 
-    # Extract unique categories
-    unique_categories = sorted(set(cat for cats in df['Categories'] for cat in cats))
+    # Display log messages in the sidebar
+    st.sidebar.title("Processing Log")
+    for message in log_messages:
+        st.sidebar.write(message)
+
+    # Extract unique categories and sort them by the number of items
+    category_counts = defaultdict(int)
+    for cats in df['Categories']:
+        for cat in cats:
+            category_counts[cat] += 1
+    sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+    unique_categories = [cat for cat, _ in sorted_categories]
 
     # Filters
     category_filter = st.selectbox('Select Category:', options=['All'] + unique_categories, index=0)
