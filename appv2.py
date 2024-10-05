@@ -152,6 +152,9 @@ def get_all_articles():
                 })
     return pd.DataFrame(all_articles), log_messages
 
+import re
+from urllib.parse import urlparse
+
 # Define German states and the 10 biggest cities globally
 states_of_germany = [
     'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
@@ -310,5 +313,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-if __name__ == "__main__":
-    main()
+
