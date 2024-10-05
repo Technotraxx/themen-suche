@@ -125,19 +125,20 @@ regional_locations = [
     'braunschweig', 'niedersachsen', 'bremen', 'nuernberg', 'bayern'
 ]
 
+# Define German states and the 10 biggest cities (move these to the global scope)
+states_of_germany = [
+    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+]
+
+biggest_cities_germany = [
+    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+    'essen', 'duesseldorf', 'bremen'
+]
+
 def normalize_categories(categories):
-    # Define German states and the 10 biggest cities
-    states_of_germany = [
-        'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
-        'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
-        'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
-    ]
-
-    biggest_cities_germany = [
-        'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
-        'essen', 'duesseldorf', 'bremen'
-    ]
-
+    # Normalization rules
     normalization_rules = {
         'regional': ['region', 'regionales', 'regional'] + regional_locations,
         'wirtschaft': ['economy', 'wirtschaft'],
