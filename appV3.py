@@ -339,13 +339,17 @@ def main():
         index=0,  # Default to 'AND'
         key='filter_logic_radio'
     )
-    
+
+    st.sidebar.markdown("")  # Space
+
     # Search by Title or Keywords
     combined_search = st.sidebar.text_input(
         'Search by Title or Keywords:',
         value='',
         key='combined_search_input'
     )
+
+    st.sidebar.markdown("")  # Space
 
     # Apply combined search filter first
     filtered_df = df.copy()
@@ -411,55 +415,75 @@ def main():
 
     # Re-render multiselect with updated options including selected items
     # This prevents selected items from vanishing
-    st.sidebar.multiselect(
-        'Select Categories:',
-        options=category_options,
-        default=selected_categories,
-        key='category_multiselect_updated',
-        help="Only categories with available articles are shown."
-    )
+    if selected_categories_clean:
+        st.sidebar.multiselect(
+            'Select Categories:',
+            options=category_options,
+            default=selected_categories,
+            key='category_multiselect_updated'
+        )
+    else:
+        st.sidebar.multiselect(
+            'Select Categories:',
+            options=category_options,
+            default=[],
+            key='category_multiselect_updated'
+        )
 
-    st.sidebar.multiselect(
-        'Select Regional Locations:',
-        options=location_options,
-        default=selected_locations,
-        key='location_multiselect_updated',
-        help="Only locations with available articles are shown."
-    )
+    if selected_locations_clean:
+        st.sidebar.multiselect(
+            'Select Regional Locations:',
+            options=location_options,
+            default=selected_locations,
+            key='location_multiselect_updated'
+        )
+    else:
+        st.sidebar.multiselect(
+            'Select Regional Locations:',
+            options=location_options,
+            default=[],
+            key='location_multiselect_updated'
+        )
 
     # Apply category and location filters
+    filtered_df_final = filtered_df.copy()
+
     if selected_categories_clean or selected_locations_clean:
         if filter_logic == 'OR':
-            condition = pd.Series([False] * len(filtered_df))
+            condition = pd.Series([False] * len(filtered_df_final))
             if selected_categories_clean:
-                condition = condition | filtered_df['Normalized_Categories'].apply(
+                condition = condition | filtered_df_final['Normalized_Categories'].apply(
                     lambda cats: any(cat in cats for cat in selected_categories_clean)
                 )
             if selected_locations_clean:
-                condition = condition | filtered_df['Normalized_Categories'].apply(
+                condition = condition | filtered_df_final['Normalized_Categories'].apply(
                     lambda locs: any(loc in locs for loc in selected_locations_clean)
                 )
-            filtered_df = filtered_df[condition]
+            filtered_df_final = filtered_df_final[condition]
         elif filter_logic == 'AND':
             if selected_categories_clean:
                 for cat in selected_categories_clean:
-                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda cats: cat in cats)]
+                    filtered_df_final = filtered_df_final[
+                        filtered_df_final['Normalized_Categories'].apply(lambda cats: cat in cats)
+                    ]
             if selected_locations_clean:
                 for loc in selected_locations_clean:
-                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda locs: loc in locs)]
+                    filtered_df_final = filtered_df_final[
+                        filtered_df_final['Normalized_Categories'].apply(lambda locs: loc in locs)
+                    ]
 
     # Sort the DataFrame by the newest publication date
-    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
+    filtered_df_final = filtered_df_final.sort_values(by='Publication_Date', ascending=False)
 
     # Display the number of articles found
-    st.subheader(f"🔍 Number of articles found: {len(filtered_df)}")
+    st.subheader(f"🔍 Number of articles found: {len(filtered_df_final)}")
 
     # Display the DataFrame
-    st.dataframe(filtered_df)
+    st.dataframe(filtered_df_final)
 
     # Download filtered articles as CSV
-    if not filtered_df.empty:
-        csv = filtered_df.to_csv(index=False)
+    if not filtered_df_final.empty:
+        csv = filtered_df_final.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
         href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">📥 Download CSV</a>'
         st.markdown(href, unsafe_allow_html=True)
@@ -469,7 +493,7 @@ def main():
 
     # Bar chart for Top 25 General Categories
     top_25_categories = (
-        filtered_df['Normalized_Categories']
+        filtered_df_final['Normalized_Categories']
         .explode()
         .value_counts()
         .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
@@ -484,16 +508,16 @@ def main():
         st.write("No category data available for visualization.")
 
     # Bar chart for Articles Published Each Hour
-    if not filtered_df.empty and filtered_df['Publication_Date'].notna().any():
-        filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
-        articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
+    if not filtered_df_final.empty and filtered_df_final['Publication_Date'].notna().any():
+        filtered_df_final['Hour'] = filtered_df_final['Publication_Date'].dt.hour
+        articles_per_hour = filtered_df_final['Hour'].value_counts().sort_index()
         st.markdown("**Number of Articles Published Each Hour**")
         st.bar_chart(articles_per_hour)
     else:
         st.write("No publication date data available for visualization.")
 
     # Distribution of Feeds
-    feed_counts = filtered_df['Feed'].value_counts()
+    feed_counts = filtered_df_final['Feed'].value_counts()
     if not feed_counts.empty:
         st.markdown("**Distribution of Feeds**")
         st.write(feed_counts)
