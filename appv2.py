@@ -218,15 +218,23 @@ def main():
     # Filters
     category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
     location_filter = st.multiselect('Select Regional Locations (States and Cities):', options=regional_options, default=[])
+    combined_search = st.text_input('Search by Title or Keywords:')
 
     # Apply filters
     filtered_df = df.copy()
+    
     if category_filter or location_filter:
         category_logic = st.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
         if category_logic == 'OR':
             filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter) or any(loc in x for loc in location_filter))]
         elif category_logic == 'AND':
             filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: all(cat in x for cat in category_filter) and all(loc in x for loc in location_filter))]
+
+    if combined_search:
+        combined_search = combined_search.lower()
+        filtered_df = filtered_df[filtered_df['Keywords'].str.lower().str.contains(combined_search, na=False) | 
+                                  filtered_df['Description'].str.lower().str.contains(combined_search, na=False) |
+                                  filtered_df['Title'].str.lower().str.contains(combined_search, na=False)]
 
     # Sort the DataFrame by the newest publication date
     filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
