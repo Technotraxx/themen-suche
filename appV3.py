@@ -283,12 +283,12 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
             for article in articles:
                 categories = extract_categories(article['link'])
                 normalized_categories = normalize_categories(categories, article['link'])
+                combined_keywords = ', '.join(article['keywords']) + ', ' + article['description']
                 all_articles.append({
                     'Feed': feed_name,
                     'URL': article['link'],
                     'Title': article['title'],
-                    'Description': article['description'],
-                    'Keywords': ', '.join(article['keywords']),
+                    'Keywords': combined_keywords,
                     'Publication_Date': article['publication_date'],
                     'Categories': categories,  # Stored as list
                     'Normalized_Categories': normalized_categories  # Stored as list
@@ -298,18 +298,20 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
             for entry in sitemap_entries:
                 categories = extract_categories(entry['loc'])
                 normalized_categories = normalize_categories(categories, entry['loc'])
+                combined_keywords = ', '.join(entry['keywords'])
                 all_articles.append({
                     'Feed': feed_name,
                     'URL': entry['loc'],
                     'Title': entry['news_title'],
-                    'Description': '',
-                    'Keywords': ', '.join(entry['keywords']),
+                    'Keywords': combined_keywords,
                     'Publication_Date': entry['publication_date'],
                     'Categories': categories,  # Stored as list
                     'Normalized_Categories': normalized_categories  # Stored as list
                 })
 
     df = pd.DataFrame(all_articles)
+    # Reorder columns
+    df = df[['Title', 'Feed', 'Keywords', 'Categories', 'Normalized_Categories', 'URL', 'Publication_Date']]
     return df, log_messages
 
 # ----------------------------- Main Application ----------------------------- #
@@ -357,7 +359,6 @@ def main():
         search_query = combined_search.lower()
         filtered_df = filtered_df[
             filtered_df['Keywords'].str.lower().str.contains(search_query, na=False) |
-            filtered_df['Description'].str.lower().str.contains(search_query, na=False) |
             filtered_df['Title'].str.lower().str.contains(search_query, na=False)
         ]
 
@@ -423,65 +424,4 @@ def main():
         elif filter_logic == 'AND':
             if selected_categories_clean:
                 filtered_df_final = filtered_df_final[
-                    filtered_df_final['Normalized_Categories'].apply(lambda cats: all(cat in cats for cat in selected_categories_clean))
-                ]
-            if selected_locations_clean:
-                filtered_df_final = filtered_df_final[
-                    filtered_df_final['Normalized_Categories'].apply(lambda locs: all(loc in locs for loc in selected_locations_clean))
-                ]
-
-    # Sort the DataFrame by the newest publication date
-    filtered_df_final = filtered_df_final.sort_values(by='Publication_Date', ascending=False)
-
-    # Display the number of articles found
-    st.subheader(f"🔍 Number of articles found: {len(filtered_df_final)}")
-
-    # Display the DataFrame
-    st.dataframe(filtered_df_final)
-
-    # Download filtered articles as CSV
-    if not filtered_df_final.empty:
-        csv = filtered_df_final.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">💾 Download CSV</a>'
-        st.markdown(href, unsafe_allow_html=True)
-
-    # Visual Insights
-    st.subheader("📊 Visual Insights")
-
-    # Bar chart for Top 25 General Categories
-    top_25_categories = (
-        filtered_df_final['Normalized_Categories']
-        .explode()
-        .dropna()
-        .value_counts()
-        .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
-        .head(25)
-    )
-    if not top_25_categories.empty:
-        st.markdown("**Top 25 Categories by Number of Articles**")
-        category_df = top_25_categories.rename_axis('Category').reset_index(name='Count')
-        category_chart = pd.DataFrame(category_df.set_index('Category')['Count'])
-        st.bar_chart(category_chart)
-    else:
-        st.write("No category data available for visualization.")
-
-    # Bar chart for Articles Published Each Hour
-    if not filtered_df_final.empty and filtered_df_final['Publication_Date'].notna().any():
-        filtered_df_final['Hour'] = filtered_df_final['Publication_Date'].dt.hour
-        articles_per_hour = filtered_df_final['Hour'].value_counts().sort_index()
-        st.markdown("**Number of Articles Published Each Hour**")
-        st.bar_chart(articles_per_hour)
-    else:
-        st.write("No publication date data available for visualization.")
-
-    # Distribution of Feeds
-    feed_counts = filtered_df_final['Feed'].value_counts()
-    if not feed_counts.empty:
-        st.markdown("**Distribution of Feeds**")
-        st.write(feed_counts)
-    else:
-        st.write("No feed distribution data available.")
-
-if __name__ == "__main__":
-    main()
+                    filtered_df_final['Normalized_Categories'].apply(lambda cats
