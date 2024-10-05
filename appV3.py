@@ -322,7 +322,7 @@ def main():
     df, log_messages = get_all_articles()
 
     # Sidebar: Processing Log
-    with st.sidebar.expander("📝 Processing Log", expanded=False):
+    with st.sidebar.expander("🗒 Processing Log", expanded=False):
         st.markdown('<div style="font-size: small;">', unsafe_allow_html=True)
         for message in log_messages:
             st.write(message)
@@ -429,15 +429,13 @@ def main():
             filtered_df_final = filtered_df_final[condition]
         elif filter_logic == 'AND':
             if selected_categories_clean:
-                for cat in selected_categories_clean:
-                    filtered_df_final = filtered_df_final[
-                        filtered_df_final['Normalized_Categories'].apply(lambda cats: cat in cats)
-                    ]
+                filtered_df_final = filtered_df_final[
+                    filtered_df_final['Normalized_Categories'].apply(lambda cats: all(cat in cats for cat in selected_categories_clean))
+                ]
             if selected_locations_clean:
-                for loc in selected_locations_clean:
-                    filtered_df_final = filtered_df_final[
-                        filtered_df_final['Normalized_Categories'].apply(lambda locs: loc in locs)
-                    ]
+                filtered_df_final = filtered_df_final[
+                    filtered_df_final['Normalized_Categories'].apply(lambda locs: all(loc in locs for loc in selected_locations_clean))
+                ]
 
     # Sort the DataFrame by the newest publication date
     filtered_df_final = filtered_df_final.sort_values(by='Publication_Date', ascending=False)
@@ -452,7 +450,7 @@ def main():
     if not filtered_df_final.empty:
         csv = filtered_df_final.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">📥 Download CSV</a>'
+        href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">💾 Download CSV</a>'
         st.markdown(href, unsafe_allow_html=True)
 
     # Visual Insights
