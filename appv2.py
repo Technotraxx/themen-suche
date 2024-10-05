@@ -199,23 +199,35 @@ def main():
     # Get all articles and create a DataFrame
     df, log_messages = get_all_articles()
 
-    # Sidebar: Processing Log in an Expander
+    # Display the processing log in the sidebar using an expander with small font
     with st.sidebar.expander("Processing Log", expanded=False):
         st.markdown('<div style="font-size: small;">', unsafe_allow_html=True)
         for message in log_messages:
             st.write(message)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # Extract category and location counts
+    category_counts = df['Categories'].explode().value_counts()
+    location_counts = df['Categories'].explode().value_counts()
+
+    # Prepare category and location options with counts for sidebar dropdowns
+    category_options = [f"{cat} ({count})" for cat, count in category_counts.items()]
+    location_options = [f"{loc} ({count})" for loc, count in location_counts.items() if loc in states_of_germany + biggest_cities_germany]
+
     # Sidebar: Filters
     st.sidebar.title("Filters")
     combined_search = st.sidebar.text_input('Search by Title or Keywords:')
-    category_filter = st.sidebar.multiselect('Select Categories:', options=df['Categories'].explode().unique(), default=[])
-    location_filter = st.sidebar.multiselect('Select Regional Locations (States and Cities):', options=states_of_germany + biggest_cities_germany, default=[])
+    category_filter = st.sidebar.multiselect('Select Categories:', options=category_options, default=[])
+    location_filter = st.sidebar.multiselect('Select Regional Locations (States and Cities):', options=location_options, default=[])
     category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
 
     # Apply filters
     filtered_df = df.copy()
-    
+
+    # Extract actual category names from selected items (since they include counts)
+    category_filter = [cat.split(' (')[0] for cat in category_filter]
+    location_filter = [loc.split(' (')[0] for loc in location_filter]
+
     if category_filter or location_filter:
         if category_logic == 'OR':
             filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter) or any(loc in x for loc in location_filter))]
@@ -262,4 +274,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
