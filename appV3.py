@@ -332,23 +332,20 @@ def main():
     # Sidebar: Filters
     st.sidebar.title("🔍 Filters")
 
-    # Arrange Filter Logic and Search Input on the Same Line
-    filter_logic_col, search_col = st.sidebar.columns([1, 3])
-
-    with filter_logic_col:
-        filter_logic = st.radio(
-            'Category Filter Logic:',
-            options=['AND', 'OR'],
-            index=0,  # Default to 'AND'
-            key='filter_logic_radio'
-        )
-
-    with search_col:
-        combined_search = st.text_input(
-            'Search by Title or Keywords:',
-            value='',
-            key='combined_search_input'
-        )
+    # Category Filter Logic
+    filter_logic = st.sidebar.radio(
+        'Category Filter Logic:',
+        options=['AND', 'OR'],
+        index=0,  # Default to 'AND'
+        key='filter_logic_radio'
+    )
+    
+    # Search by Title or Keywords
+    combined_search = st.sidebar.text_input(
+        'Search by Title or Keywords:',
+        value='',
+        key='combined_search_input'
+    )
 
     # Apply combined search filter first
     filtered_df = df.copy()
