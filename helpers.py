@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import feedparser
 import pandas as pd
 import requests
+import streamlit as st
 
 # ----------------------------- Configuration ----------------------------- #
 
@@ -67,6 +68,7 @@ COMPILED_NON_CATEGORY_PATTERNS: List[Any] = [re.compile(pattern) for pattern in 
 
 # ----------------------------- Helper Functions ----------------------------- #
 
+@st.cache_data(ttl=3600)
 def determine_feed_type(feed_url: str) -> str:
     try:
         feed = feedparser.parse(feed_url)
@@ -80,6 +82,7 @@ def determine_feed_type(feed_url: str) -> str:
         return 'sitemap'
 
 
+@st.cache_data(ttl=3600)
 def extract_urls_from_rss(feed_url: str) -> List[Dict[str, Any]]:
     articles = []
     try:
@@ -101,6 +104,7 @@ def extract_urls_from_rss(feed_url: str) -> List[Dict[str, Any]]:
     return articles
 
 
+@st.cache_data(ttl=3600)
 def extract_urls_from_sitemap(feed_url: str) -> List[Dict[str, Any]]:
     entries = []
     try:
@@ -187,6 +191,7 @@ def normalize_categories(categories: List[str], url: str) -> List[str]:
     return list(normalized)
 
 
+@st.cache_data(ttl=3600)
 def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
     all_articles: List[Dict[str, Any]] = []
     log_messages: List[str] = []
