@@ -199,32 +199,24 @@ def main():
     # Get all articles and create a DataFrame
     df, log_messages = get_all_articles()
 
-    # Display log messages in the sidebar
-    st.sidebar.title("Processing Log")
-    for message in log_messages:
-        st.sidebar.write(message)
+    # Sidebar: Processing Log in an Expander
+    with st.sidebar.expander("Processing Log", expanded=False):
+        st.markdown('<div style="font-size: small;">', unsafe_allow_html=True)
+        for message in log_messages:
+            st.write(message)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Extract unique categories and sort them by the number of items
-    category_counts = defaultdict(int)
-    for cats in df['Categories']:
-        for cat in cats:
-            category_counts[cat] += 1
-    sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
-    unique_categories = [cat for cat, _ in sorted_categories]
-    regional_filter = [cat for cat in unique_categories if cat.startswith('regional')]
-    top_locations = [loc for loc in regional_filter if loc in regional_locations]
-    regional_options = states_of_germany + biggest_cities_germany
-
-    # Filters
-    category_filter = st.multiselect('Select Categories:', options=unique_categories, default=[])
-    location_filter = st.multiselect('Select Regional Locations (States and Cities):', options=regional_options, default=[])
-    combined_search = st.text_input('Search by Title or Keywords:')
+    # Sidebar: Filters
+    st.sidebar.title("Filters")
+    combined_search = st.sidebar.text_input('Search by Title or Keywords:')
+    category_filter = st.sidebar.multiselect('Select Categories:', options=df['Categories'].explode().unique(), default=[])
+    location_filter = st.sidebar.multiselect('Select Regional Locations (States and Cities):', options=states_of_germany + biggest_cities_germany, default=[])
+    category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
 
     # Apply filters
     filtered_df = df.copy()
     
     if category_filter or location_filter:
-        category_logic = st.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
         if category_logic == 'OR':
             filtered_df = filtered_df[filtered_df['Categories'].apply(lambda x: any(cat in x for cat in category_filter) or any(loc in x for loc in location_filter))]
         elif category_logic == 'AND':
@@ -253,7 +245,7 @@ def main():
     # Add charts to visualize the data
     st.subheader("Visual Insights")
     # Bar chart for the Top 25 Categories by number of articles (sorted highest to lowest)
-    top_25_categories = sorted_categories[:25]
+    top_25_categories = sorted(df['Categories'].explode().value_counts().items(), key=lambda x: x[1], reverse=True)[:25]
     category_names, category_counts = zip(*top_25_categories)
     st.bar_chart(pd.DataFrame({'Categories': category_names, 'Count': category_counts}).set_index('Categories').sort_values(by='Count', ascending=False))
 
@@ -270,3 +262,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
