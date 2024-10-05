@@ -40,10 +40,13 @@ COMPOUND_REGIONS: List[str] = [
 ]
 
 # Combine lists of locations with priority to compound regions
-REGIONAL_LOCATIONS: List[str] = (
+# Sort REGIONAL_LOCATIONS by descending length to prioritize longer names first
+REGIONAL_LOCATIONS: List[str] = sorted(
     COMPOUND_REGIONS +
     [region for region in STATES_OF_GERMANY if region not in COMPOUND_REGIONS] +
-    BIGGEST_CITIES_GERMANY
+    BIGGEST_CITIES_GERMANY,
+    key=lambda x: len(x),
+    reverse=True
 )
 
 NORMALIZATION_RULES: Dict[str, List[str]] = {
@@ -147,14 +150,13 @@ def extract_urls_from_sitemap(feed_url: str) -> List[Dict[str, Any]]:
             keywords_elem = url.find('news:news/news:keywords', namespaces=namespace)
             keywords = [kw.strip().lower() for kw in keywords_elem.text.split(',')] if keywords_elem is not None and keywords_elem.text else []
             publication_date_str = url.find('news:news/news:publication_date', namespaces=namespace)
-            publication_date = publication_date_str.text if publication_date_str is not None and publication_date_str.text else ''
-            pub_date = parse_iso_datetime(publication_date)
+            publication_date = parse_iso_datetime(publication_date_str.text) if publication_date_str is not None and publication_date_str.text else None
             news_title_elem = url.find('news:news/news:title', namespaces=namespace)
             news_title = news_title_elem.text if news_title_elem is not None and news_title_elem.text else ''
             entries.append({
                 'loc': loc_text,
                 'keywords': keywords,
-                'publication_date': pub_date,
+                'publication_date': publication_date,
                 'news_title': news_title
             })
     except Exception as e:
@@ -204,16 +206,16 @@ def extract_categories(url: str) -> List[str]:
     Returns:
         List[str]: A list of category segments.
     """
-    categories = []
     try:
         parsed_url = urlparse(url)
         path = parsed_url.path
         parts = [part for part in path.split('/') if part]
-        potential_categories = parts[:-1]
+        potential_categories = parts[:-1]  # Exclude the last part which is typically the article
         categories = [cat for cat in potential_categories if not any(pattern.match(cat) for pattern in COMPILED_NON_CATEGORY_PATTERNS)]
+        return categories
     except Exception as e:
         st.error(f"Error parsing URL {url}: {e}")
-    return categories
+        return []
 
 
 def normalize_categories(categories: List[str], url: str) -> List[str]:
@@ -245,21 +247,20 @@ def normalize_categories(categories: List[str], url: str) -> List[str]:
     # Step 2: Extract specific regional locations from URL and categories
     url_path = urlparse(url).path.lower()
 
-    # Match compound regions first
-    for region in COMPOUND_REGIONS:
-        if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
-            specific_regions.add(region)
-
-    # Match other regional locations if not already matched
     for region in REGIONAL_LOCATIONS:
-        if region not in specific_regions:
-            if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
-                specific_regions.add(region)
+        # Use word boundaries and ensure 'region' is a complete segment
+        # This prevents partial matches like 'sachsen' in 'sachsen-anhalt'
+        # Match either as a complete path segment or within category names
+        # Ensure that single regions are not part of a compound region
+        pattern = rf'(?<![\w-]){re.escape(region)}(?![\w-])'
+        if re.search(pattern, url_path) or any(re.search(pattern, cat.lower()) for cat in categories):
+            specific_regions.add(region)
 
     # Step 3: Add specific regional locations to normalized categories
     if specific_regions:
         normalized.update(specific_regions)
-        normalized.discard("regional")  # Remove "regional" to avoid redundancy
+        # Remove "regional" if specific regions are identified to avoid redundancy
+        normalized.discard("regional")
 
     return list(normalized)
 
@@ -279,11 +280,12 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
         feed_type = determine_feed_type(feed_url)
         log_message = f"Processing '{feed_name}' as {feed_type.upper()}..."
         log_messages.append(log_message)
-        st.write(log_message)  # Optionally display logs in the main area
 
         if feed_type == 'rss':
             articles = extract_urls_from_rss(feed_url)
             for article in articles:
+                categories = extract_categories(article['link'])
+                normalized_categories = normalize_categories(categories, article['link'])
                 all_articles.append({
                     'Feed': feed_name,
                     'URL': article['link'],
@@ -291,11 +293,14 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Description': article['description'],
                     'Keywords': ', '.join(article['keywords']),
                     'Publication_Date': article['publication_date'],
-                    'Categories': normalize_categories(extract_categories(article['link']), article['link'])
+                    'Categories': ', '.join(categories),
+                    'Normalized_Categories': ', '.join(normalized_categories)
                 })
         else:
             sitemap_entries = extract_urls_from_sitemap(feed_url)
             for entry in sitemap_entries:
+                categories = extract_categories(entry['loc'])
+                normalized_categories = normalize_categories(categories, entry['loc'])
                 all_articles.append({
                     'Feed': feed_name,
                     'URL': entry['loc'],
@@ -303,7 +308,8 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Description': '',
                     'Keywords': ', '.join(entry['keywords']),
                     'Publication_Date': entry['publication_date'],
-                    'Categories': normalize_categories(extract_categories(entry['loc']), entry['loc'])
+                    'Categories': ', '.join(categories),
+                    'Normalized_Categories': ', '.join(normalized_categories)
                 })
 
     df = pd.DataFrame(all_articles)
@@ -312,7 +318,7 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
 # ----------------------------- Main Application ----------------------------- #
 
 def main():
-    st.set_page_config(page_title='News Feed Aggregator', layout='wide')
+    st.set_page_config(page_title='📰 News Feed Aggregator', layout='wide')
     st.title('📰 News Feed Aggregator')
 
     # Retrieve all articles and log messages
@@ -325,17 +331,11 @@ def main():
             st.write(message)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Normalize categories in the DataFrame
-    df['Normalized_Categories'] = df.apply(
-        lambda row: normalize_categories(
-            extract_categories(row['URL']),
-            row['URL']
-        ),
-        axis=1
-    )
+    # Normalize categories in the DataFrame (already done during data aggregation)
+    # Therefore, 'Normalized_Categories' are already present
 
     # Count categories and locations
-    category_counts = df['Normalized_Categories'].explode().value_counts()
+    category_counts = df['Normalized_Categories'].str.split(', ').explode().value_counts()
     location_counts = category_counts[category_counts.index.isin(REGIONAL_LOCATIONS)]
     general_category_counts = category_counts[~category_counts.index.isin(REGIONAL_LOCATIONS)]
 
@@ -360,20 +360,14 @@ def main():
     if selected_categories or selected_locations:
         if category_logic == 'OR':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda cats: any(cat in cats for cat in selected_categories)) |
-                filtered_df['Normalized_Categories'].apply(lambda locs: any(loc in locs for loc in selected_locations))
+                filtered_df['Normalized_Categories'].str.contains('|'.join(map(re.escape, selected_categories))) |
+                filtered_df['Normalized_Categories'].str.contains('|'.join(map(re.escape, selected_locations)))
             ]
         elif category_logic == 'AND':
-            filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda cats: all(cat in cats for cat in selected_categories)) &
-                filtered_df['Normalized_Categories'].apply(lambda locs: all(loc in locs for loc in selected_locations))
-            ]
-
-    # Exact match for location filters
-    if selected_locations:
-        filtered_df = filtered_df[
-            filtered_df['Normalized_Categories'].apply(lambda cats: all(loc in cats for loc in selected_locations))
-        ]
+            for cat in selected_categories:
+                filtered_df = filtered_df[filtered_df['Normalized_Categories'].str.contains(rf'\b{re.escape(cat)}\b')]
+            for loc in selected_locations:
+                filtered_df = filtered_df[filtered_df['Normalized_Categories'].str.contains(rf'\b{re.escape(loc)}\b')]
 
     # Combined search filter
     if combined_search:
@@ -414,7 +408,7 @@ def main():
         st.write("No category data available for visualization.")
 
     # Bar chart for Articles Published Each Hour
-    if not filtered_df.empty:
+    if not filtered_df.empty and filtered_df['Publication_Date'].notna().any():
         filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
         articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
         st.markdown("**Number of Articles Published Each Hour**")
