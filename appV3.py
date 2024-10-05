@@ -2,7 +2,8 @@ import base64
 import pandas as pd
 import streamlit as st
 from helpers import (determine_feed_type, extract_urls_from_rss, extract_urls_from_sitemap,
-                     parse_datetime, parse_iso_datetime, extract_categories, normalize_categories, get_all_articles)
+                     parse_datetime, parse_iso_datetime, extract_categories, normalize_categories, get_all_articles,
+                     REGIONAL_LOCATIONS)
 
 # ----------------------------- Main Application ----------------------------- #
 
