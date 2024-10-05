@@ -1,18 +1,23 @@
 import base64
 import pandas as pd
 import streamlit as st
+from streamlit.runtime.caching import cache_data
 from helpers import (determine_feed_type, extract_urls_from_rss, extract_urls_from_sitemap,
                      parse_datetime, parse_iso_datetime, extract_categories, normalize_categories, get_all_articles,
                      REGIONAL_LOCATIONS)
 
 # ----------------------------- Main Application ----------------------------- #
 
+@st.cache_data(ttl=3600)
+def cached_get_all_articles():
+    return get_all_articles()
+
 def main():
     st.set_page_config(page_title='📰 News Feed Aggregator', layout='wide')
     st.title('📰 News Feed Aggregator')
 
     # Retrieve all articles and log messages
-    df, log_messages = get_all_articles()
+    df, log_messages = cached_get_all_articles()
 
     # Sidebar: Processing Log
     with st.sidebar.expander("🗒 Processing Log", expanded=False):
