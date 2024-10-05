@@ -141,30 +141,29 @@ def normalize_categories(categories):
     }
 
     normalized = set()
-    specific_regions = set()
     
+    # Step 1: Normalize general categories, including "regional"
     for cat in categories:
-        found = False
         cat_lower = cat.lower()
+        for key, synonyms in normalization_rules.items():
+            if cat_lower in [syn.lower() for syn in synonyms]:
+                normalized.add(key)
+                break
+        else:
+            normalized.add(cat_lower)
 
-        # Check for specific regional locations first
+    # Step 2: Add specific regional locations (states and cities), but avoid adding them under "regional"
+    for cat in categories:
+        cat_lower = cat.lower()
         for region in regional_locations:
-            if region in cat_lower:
-                specific_regions.add(region)
-                found = True
+            if region in cat_lower and region not in normalized:
+                normalized.add(region)
+                # Remove "regional" if it's redundant and a specific region is found
+                if "regional" in normalized:
+                    normalized.remove("regional")
                 break
 
-        # If no specific regional location found, apply general normalization rules
-        if not found:
-            for key, synonyms in normalization_rules.items():
-                if cat_lower in [syn.lower() for syn in synonyms]:
-                    normalized.add(key)
-                    found = True
-                    break
-            if not found:
-                normalized.add(cat_lower)
-
-    return list(normalized), list(specific_regions)
+    return list(normalized)
 
 @st.cache_data(ttl=3600)
 def get_all_articles():
@@ -214,24 +213,19 @@ def main():
             st.write(message)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Extract categories and specific regional locations for each article
-    df[['Normalized_Categories', 'Specific_Regions']] = df['Categories'].apply(
-        lambda x: pd.Series(normalize_categories(x))
-    )
+    # Normalize categories in the DataFrame
+    df['Normalized_Categories'] = df['Categories'].apply(normalize_categories)
 
-    # Extract category and location counts
+    # Extract category counts for sidebar dropdowns
     category_counts = df['Normalized_Categories'].explode().value_counts()
-    location_counts = df['Specific_Regions'].explode().value_counts()
 
-    # Prepare category and location options with counts for sidebar dropdowns
+    # Prepare category options with counts for sidebar dropdowns
     category_options = [f"{cat} ({count})" for cat, count in category_counts.items()]
-    location_options = [f"{loc} ({count})" for loc, count in location_counts.items()]
 
     # Sidebar: Filters
     st.sidebar.title("Filters")
     combined_search = st.sidebar.text_input('Search by Title or Keywords:')
     category_filter = st.sidebar.multiselect('Select Categories:', options=category_options, default=[])
-    location_filter = st.sidebar.multiselect('Select Regional Locations (States and Cities):', options=location_options, default=[])
     category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
 
     # Apply filters
@@ -239,19 +233,12 @@ def main():
 
     # Extract actual category names from selected items (since they include counts)
     category_filter = [cat.split(' (')[0] for cat in category_filter]
-    location_filter = [loc.split(' (')[0] for loc in location_filter]
 
-    if category_filter or location_filter:
+    if category_filter:
         if category_logic == 'OR':
-            filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter)) |
-                filtered_df['Specific_Regions'].apply(lambda x: any(loc in x for loc in location_filter))
-            ]
+            filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
         elif category_logic == 'AND':
-            filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter)) &
-                filtered_df['Specific_Regions'].apply(lambda x: all(loc in x for loc in location_filter))
-            ]
+            filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter))]
 
     if combined_search:
         combined_search = combined_search.lower()
