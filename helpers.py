@@ -2,6 +2,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse
 
 import feedparser
 import pandas as pd
