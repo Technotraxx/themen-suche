@@ -294,7 +294,7 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Keywords': ', '.join(article['keywords']),
                     'Publication_Date': article['publication_date'],
                     'Categories': ', '.join(categories),
-                    'Normalized_Categories': ', '.join(normalized_categories)
+                    'Normalized_Categories': normalized_categories  # Changed to list for easier manipulation
                 })
         else:
             sitemap_entries = extract_urls_from_sitemap(feed_url)
@@ -309,7 +309,7 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Keywords': ', '.join(entry['keywords']),
                     'Publication_Date': entry['publication_date'],
                     'Categories': ', '.join(categories),
-                    'Normalized_Categories': ', '.join(normalized_categories)
+                    'Normalized_Categories': normalized_categories  # Changed to list for easier manipulation
                 })
 
     df = pd.DataFrame(all_articles)
@@ -331,11 +331,8 @@ def main():
             st.write(message)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Normalize categories in the DataFrame (already done during data aggregation)
-    # Therefore, 'Normalized_Categories' are already present
-
-    # Count categories and locations
-    category_counts = df['Normalized_Categories'].str.split(', ').explode().value_counts()
+    # Count categories and locations based on the entire dataset initially
+    category_counts = df['Normalized_Categories'].explode().value_counts()
     location_counts = category_counts[category_counts.index.isin(REGIONAL_LOCATIONS)]
     general_category_counts = category_counts[~category_counts.index.isin(REGIONAL_LOCATIONS)]
 
@@ -343,42 +340,111 @@ def main():
     category_options = [f"{cat} ({count})" for cat, count in general_category_counts.items()]
     location_options = [f"{loc} ({count})" for loc, count in location_counts.items()]
 
+    # Initialize Session State for filters to retain selections
+    if 'filter_logic' not in st.session_state:
+        st.session_state.filter_logic = 'AND'
+
+    if 'combined_search' not in st.session_state:
+        st.session_state.combined_search = ''
+
+    if 'selected_categories' not in st.session_state:
+        st.session_state.selected_categories = []
+
+    if 'selected_locations' not in st.session_state:
+        st.session_state.selected_locations = []
+
     # Sidebar: Filters
     st.sidebar.title("🔍 Filters")
-    combined_search = st.sidebar.text_input('Search by Title or Keywords:')
-    selected_categories = st.sidebar.multiselect('Select Categories:', options=category_options, default=[])
-    selected_locations = st.sidebar.multiselect('Select Regional Locations:', options=location_options, default=[])
-    category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
+
+    # Arrange Filter Logic and Search Input on the Same Line
+    filter_logic, combined_search = st.sidebar.columns([1, 3])
+
+    with filter_logic:
+        st.session_state.filter_logic = st.radio(
+            'Category Filter Logic:',
+            options=['AND', 'OR'],
+            index=0,  # Default to 'AND'
+            key='filter_logic_radio'
+        )
+
+    with combined_search:
+        st.session_state.combined_search = st.text_input(
+            'Search by Title or Keywords:',
+            value=st.session_state.combined_search,
+            key='combined_search_input'
+        )
+
+    # Dynamic Filter Options Based on Current Selections
+    # To achieve this, we'll apply filters in steps and update available options accordingly
+
+    # Extract selections from multiselects
+    selected_categories = st.sidebar.multiselect(
+        'Select Categories:',
+        options=category_options,
+        default=st.session_state.selected_categories,
+        key='category_multiselect'
+    )
+
+    selected_locations = st.sidebar.multiselect(
+        'Select Regional Locations:',
+        options=location_options,
+        default=st.session_state.selected_locations,
+        key='location_multiselect'
+    )
+
+    # Update session state with current selections
+    st.session_state.selected_categories = selected_categories
+    st.session_state.selected_locations = selected_locations
+
+    # Extract actual category and location names from selected items
+    selected_categories_clean = [cat.split(' (')[0] for cat in selected_categories]
+    selected_locations_clean = [loc.split(' (')[0] for loc in selected_locations]
 
     # Apply filters
     filtered_df = df.copy()
 
-    # Extract actual category and location names from selected items
-    selected_categories = [cat.split(' (')[0] for cat in selected_categories]
-    selected_locations = [loc.split(' (')[0] for loc in selected_locations]
-
-    if selected_categories or selected_locations:
-        if category_logic == 'OR':
+    if selected_categories_clean or selected_locations_clean:
+        if st.session_state.filter_logic == 'OR':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].str.contains('|'.join(map(re.escape, selected_categories))) |
-                filtered_df['Normalized_Categories'].str.contains('|'.join(map(re.escape, selected_locations)))
+                filtered_df['Normalized_Categories'].apply(lambda cats: any(cat in cats for cat in selected_categories_clean)) |
+                filtered_df['Normalized_Categories'].apply(lambda locs: any(loc in locs for loc in selected_locations_clean))
             ]
-        elif category_logic == 'AND':
-            for cat in selected_categories:
-                filtered_df = filtered_df[filtered_df['Normalized_Categories'].str.contains(rf'\b{re.escape(cat)}\b')]
-            for loc in selected_locations:
-                filtered_df = filtered_df[filtered_df['Normalized_Categories'].str.contains(rf'\b{re.escape(loc)}\b')]
+        elif st.session_state.filter_logic == 'AND':
+            if selected_categories_clean:
+                for cat in selected_categories_clean:
+                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda cats: cat in cats)]
+            if selected_locations_clean:
+                for loc in selected_locations_clean:
+                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda locs: loc in locs)]
 
     # Combined search filter
-    if combined_search:
-        search_query = combined_search.lower()
+    if st.session_state.combined_search:
+        search_query = st.session_state.combined_search.lower()
         filtered_df = filtered_df[
             filtered_df['Keywords'].str.lower().str.contains(search_query, na=False) |
             filtered_df['Description'].str.lower().str.contains(search_query, na=False) |
             filtered_df['Title'].str.lower().str.contains(search_query, na=False)
         ]
 
-    # Sort by publication date
+    # Update available categories and locations based on the filtered data
+    updated_category_counts = filtered_df['Normalized_Categories'].explode().value_counts()
+    updated_location_counts = updated_category_counts[updated_category_counts.index.isin(REGIONAL_LOCATIONS)]
+    updated_general_category_counts = updated_category_counts[~updated_category_counts.index.isin(REGIONAL_LOCATIONS)]
+
+    # Prepare updated filter options with counts
+    updated_category_options = [f"{cat} ({count})" for cat, count in updated_general_category_counts.items()]
+    updated_location_options = [f"{loc} ({count})" for loc, count in updated_location_counts.items()]
+
+    # Update the multiselect options
+    # Note: Streamlit does not support dynamically updating multiselect options based on selections directly.
+    # As a workaround, we can display the updated counts below or encourage users to reset filters if needed.
+    st.sidebar.markdown("### Available Categories:")
+    st.sidebar.write(updated_category_options if updated_category_options else "No categories available.")
+
+    st.sidebar.markdown("### Available Regional Locations:")
+    st.sidebar.write(updated_location_options if updated_location_options else "No locations available.")
+
+    # Sort the DataFrame by the newest publication date
     filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
 
     # Display the number of articles found
@@ -398,7 +464,7 @@ def main():
     st.subheader("📊 Visual Insights")
 
     # Bar chart for Top 25 General Categories
-    top_25_categories = general_category_counts.head(25)
+    top_25_categories = updated_general_category_counts.head(25)
     if not top_25_categories.empty:
         st.markdown("**Top 25 Categories by Number of Articles**")
         category_df = top_25_categories.rename_axis('Category').reset_index(name='Count')
