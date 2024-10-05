@@ -1,0 +1,434 @@
+import base64
+import re
+import xml.etree.ElementTree as ET
+from collections import defaultdict
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Tuple
+
+import feedparser
+import pandas as pd
+import requests
+import streamlit as st
+from urllib.parse import urlparse
+
+# ----------------------------- Configuration ----------------------------- #
+
+FEEDS: Dict[str, str] = {
+    'Stern.de News Sitemap': 'https://www.stern.de/736974656d6170-news.xml',
+    'Welt.de News Sitemap': 'https://www.welt.de/sitemaps/newssitemap/newssitemap.xml',
+    'Spiegel.de News Sitemap': 'https://www.spiegel.de/sitemaps/news-de.xml',
+    'Focus.de Politik News Sitemap': 'https://www.focus.de/sitemap_news_politik.xml',
+    'Bild.de News Sitemap': 'https://www.bild.de/sitemap-news.xml',
+    'Tagesschau.de RSS Feed': 'https://www.tagesschau.de/index~rss2.xml',
+    'T-Online.de RSS Feed': 'https://www.t-online.de/schlagzeilen/feed.rss'
+}
+
+STATES_OF_GERMANY: List[str] = [
+    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+]
+
+BIGGEST_CITIES_GERMANY: List[str] = [
+    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+    'essen', 'duesseldorf', 'bremen'
+]
+
+COMPOUND_REGIONS: List[str] = [
+    'baden-wuerttemberg', 'mecklenburg-vorpommern', 'nordrhein-westfalen',
+    'rheinland-pfalz', 'sachsen-anhalt', 'schleswig-holstein'
+]
+
+# Combine lists of locations with priority to compound regions
+REGIONAL_LOCATIONS: List[str] = (
+    COMPOUND_REGIONS +
+    [region for region in STATES_OF_GERMANY if region not in COMPOUND_REGIONS] +
+    BIGGEST_CITIES_GERMANY
+)
+
+NORMALIZATION_RULES: Dict[str, List[str]] = {
+    'wirtschaft': ['economy', 'wirtschaft'],
+    'politik': ['politics', 'politik'],
+    'ausland': ['international', 'ausland'],
+    'sport': ['sports', 'sport'],
+    'regional': ['region', 'regionales', 'regional']
+}
+
+NON_CATEGORY_PATTERNS: List[str] = [
+    r'^article\d+$',
+    r'^plus\d+$',
+    r'^amp\d+$',
+    r'^content\d+$',
+    r'^rss\d+$',
+    r'^id_\d+$'
+]
+
+COMPILED_NON_CATEGORY_PATTERNS: List[Any] = [re.compile(pattern) for pattern in NON_CATEGORY_PATTERNS]
+
+# ----------------------------- Helper Functions ----------------------------- #
+
+@st.cache_data(ttl=3600)
+def determine_feed_type(feed_url: str) -> str:
+    """
+    Determine whether the given feed URL is an RSS feed or a Sitemap.
+
+    Args:
+        feed_url (str): The URL of the feed.
+
+    Returns:
+        str: 'rss' if it's an RSS feed, 'sitemap' otherwise.
+    """
+    try:
+        feed = feedparser.parse(feed_url)
+        if feed.bozo:
+            return 'sitemap'
+        elif hasattr(feed, 'entries') and len(feed.entries) > 0 and hasattr(feed.entries[0], 'link'):
+            return 'rss'
+        else:
+            return 'sitemap'
+    except Exception:
+        return 'sitemap'
+
+
+@st.cache_data(ttl=3600)
+def extract_urls_from_rss(feed_url: str) -> List[Dict[str, Any]]:
+    """
+    Extract articles from an RSS feed.
+
+    Args:
+        feed_url (str): The RSS feed URL.
+
+    Returns:
+        List[Dict[str, Any]]: A list of articles with relevant information.
+    """
+    articles = []
+    try:
+        feed = feedparser.parse(feed_url)
+        for entry in feed.entries:
+            keywords = [tag.term for tag in entry.tags if 'term' in tag] if 'tags' in entry else []
+            publication_date_str = entry.get('published', entry.get('updated', ''))
+            pub_date = parse_datetime(publication_date_str)
+            news_title = entry.get('title', '')
+            articles.append({
+                'link': entry.get('link', ''),
+                'title': news_title,
+                'description': entry.get('description', ''),
+                'keywords': keywords,
+                'publication_date': pub_date
+            })
+    except Exception as e:
+        st.error(f"Error parsing RSS feed {feed_url}: {e}")
+    return articles
+
+
+@st.cache_data(ttl=3600)
+def extract_urls_from_sitemap(feed_url: str) -> List[Dict[str, Any]]:
+    """
+    Extract URLs from a Sitemap.
+
+    Args:
+        feed_url (str): The Sitemap URL.
+
+    Returns:
+        List[Dict[str, Any]]: A list of sitemap entries with relevant information.
+    """
+    entries = []
+    try:
+        response = requests.get(feed_url)
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        namespace = {
+            's': 'http://www.sitemaps.org/schemas/sitemap/0.9',
+            'news': 'http://www.google.com/schemas/sitemap-news/0.9'
+        }
+        for url in root.findall('s:url', namespaces=namespace):
+            loc = url.find('s:loc', namespaces=namespace)
+            loc_text = loc.text if loc is not None else ''
+            keywords_elem = url.find('news:news/news:keywords', namespaces=namespace)
+            keywords = [kw.strip().lower() for kw in keywords_elem.text.split(',')] if keywords_elem is not None and keywords_elem.text else []
+            publication_date_str = url.find('news:news/news:publication_date', namespaces=namespace)
+            publication_date = publication_date_str.text if publication_date_str is not None and publication_date_str.text else ''
+            pub_date = parse_iso_datetime(publication_date)
+            news_title_elem = url.find('news:news/news:title', namespaces=namespace)
+            news_title = news_title_elem.text if news_title_elem is not None and news_title_elem.text else ''
+            entries.append({
+                'loc': loc_text,
+                'keywords': keywords,
+                'publication_date': pub_date,
+                'news_title': news_title
+            })
+    except Exception as e:
+        st.error(f"Error parsing Sitemap {feed_url}: {e}")
+    return entries
+
+
+def parse_datetime(date_str: str) -> Any:
+    """
+    Parse a datetime string into a datetime object.
+
+    Args:
+        date_str (str): The datetime string.
+
+    Returns:
+        datetime or None: The parsed datetime object or None if parsing fails.
+    """
+    try:
+        return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %Z").astimezone(timezone.utc).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def parse_iso_datetime(date_str: str) -> Any:
+    """
+    Parse an ISO formatted datetime string into a datetime object.
+
+    Args:
+        date_str (str): The ISO datetime string.
+
+    Returns:
+        datetime or None: The parsed datetime object or None if parsing fails.
+    """
+    try:
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def extract_categories(url: str) -> List[str]:
+    """
+    Extract potential category segments from a URL path.
+
+    Args:
+        url (str): The URL to extract categories from.
+
+    Returns:
+        List[str]: A list of category segments.
+    """
+    categories = []
+    try:
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        parts = [part for part in path.split('/') if part]
+        potential_categories = parts[:-1]
+        categories = [cat for cat in potential_categories if not any(pattern.match(cat) for pattern in COMPILED_NON_CATEGORY_PATTERNS)]
+    except Exception as e:
+        st.error(f"Error parsing URL {url}: {e}")
+    return categories
+
+
+def normalize_categories(categories: List[str], url: str) -> List[str]:
+    """
+    Normalize category names and extract specific regional locations.
+
+    Args:
+        categories (List[str]): The list of extracted categories.
+        url (str): The URL associated with the categories.
+
+    Returns:
+        List[str]: A list of normalized categories.
+    """
+    normalized: set = set()
+    specific_regions: set = set()
+
+    # Step 1: Normalize general categories
+    for cat in categories:
+        cat_lower = cat.lower()
+        matched = False
+        for key, synonyms in NORMALIZATION_RULES.items():
+            if cat_lower in [syn.lower() for syn in synonyms]:
+                normalized.add(key)
+                matched = True
+                break
+        if not matched:
+            normalized.add(cat_lower)
+
+    # Step 2: Extract specific regional locations from URL and categories
+    url_path = urlparse(url).path.lower()
+
+    # Match compound regions first
+    for region in COMPOUND_REGIONS:
+        if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
+            specific_regions.add(region)
+
+    # Match other regional locations if not already matched
+    for region in REGIONAL_LOCATIONS:
+        if region not in specific_regions:
+            if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
+                specific_regions.add(region)
+
+    # Step 3: Add specific regional locations to normalized categories
+    if specific_regions:
+        normalized.update(specific_regions)
+        normalized.discard("regional")  # Remove "regional" to avoid redundancy
+
+    return list(normalized)
+
+
+@st.cache_data(ttl=3600)
+def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Aggregate articles from all configured feeds.
+
+    Returns:
+        Tuple[pd.DataFrame, List[str]]: A DataFrame containing all articles and a list of log messages.
+    """
+    all_articles: List[Dict[str, Any]] = []
+    log_messages: List[str] = []
+
+    for feed_name, feed_url in FEEDS.items():
+        feed_type = determine_feed_type(feed_url)
+        log_message = f"Processing '{feed_name}' as {feed_type.upper()}..."
+        log_messages.append(log_message)
+        st.write(log_message)  # Optionally display logs in the main area
+
+        if feed_type == 'rss':
+            articles = extract_urls_from_rss(feed_url)
+            for article in articles:
+                all_articles.append({
+                    'Feed': feed_name,
+                    'URL': article['link'],
+                    'Title': article['title'],
+                    'Description': article['description'],
+                    'Keywords': ', '.join(article['keywords']),
+                    'Publication_Date': article['publication_date'],
+                    'Categories': normalize_categories(extract_categories(article['link']), article['link'])
+                })
+        else:
+            sitemap_entries = extract_urls_from_sitemap(feed_url)
+            for entry in sitemap_entries:
+                all_articles.append({
+                    'Feed': feed_name,
+                    'URL': entry['loc'],
+                    'Title': entry['news_title'],
+                    'Description': '',
+                    'Keywords': ', '.join(entry['keywords']),
+                    'Publication_Date': entry['publication_date'],
+                    'Categories': normalize_categories(extract_categories(entry['loc']), entry['loc'])
+                })
+
+    df = pd.DataFrame(all_articles)
+    return df, log_messages
+
+# ----------------------------- Main Application ----------------------------- #
+
+def main():
+    st.set_page_config(page_title='News Feed Aggregator', layout='wide')
+    st.title('📰 News Feed Aggregator')
+
+    # Retrieve all articles and log messages
+    df, log_messages = get_all_articles()
+
+    # Sidebar: Processing Log
+    with st.sidebar.expander("📝 Processing Log", expanded=False):
+        st.markdown('<div style="font-size: small;">', unsafe_allow_html=True)
+        for message in log_messages:
+            st.write(message)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Normalize categories in the DataFrame
+    df['Normalized_Categories'] = df.apply(
+        lambda row: normalize_categories(
+            extract_categories(row['URL']),
+            row['URL']
+        ),
+        axis=1
+    )
+
+    # Count categories and locations
+    category_counts = df['Normalized_Categories'].explode().value_counts()
+    location_counts = category_counts[category_counts.index.isin(REGIONAL_LOCATIONS)]
+    general_category_counts = category_counts[~category_counts.index.isin(REGIONAL_LOCATIONS)]
+
+    # Prepare filter options with counts
+    category_options = [f"{cat} ({count})" for cat, count in general_category_counts.items()]
+    location_options = [f"{loc} ({count})" for loc, count in location_counts.items()]
+
+    # Sidebar: Filters
+    st.sidebar.title("🔍 Filters")
+    combined_search = st.sidebar.text_input('Search by Title or Keywords:')
+    selected_categories = st.sidebar.multiselect('Select Categories:', options=category_options, default=[])
+    selected_locations = st.sidebar.multiselect('Select Regional Locations:', options=location_options, default=[])
+    category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
+
+    # Apply filters
+    filtered_df = df.copy()
+
+    # Extract actual category and location names from selected items
+    selected_categories = [cat.split(' (')[0] for cat in selected_categories]
+    selected_locations = [loc.split(' (')[0] for loc in selected_locations]
+
+    if selected_categories or selected_locations:
+        if category_logic == 'OR':
+            filtered_df = filtered_df[
+                filtered_df['Normalized_Categories'].apply(lambda cats: any(cat in cats for cat in selected_categories)) |
+                filtered_df['Normalized_Categories'].apply(lambda locs: any(loc in locs for loc in selected_locations))
+            ]
+        elif category_logic == 'AND':
+            filtered_df = filtered_df[
+                filtered_df['Normalized_Categories'].apply(lambda cats: all(cat in cats for cat in selected_categories)) &
+                filtered_df['Normalized_Categories'].apply(lambda locs: all(loc in locs for loc in selected_locations))
+            ]
+
+    # Exact match for location filters
+    if selected_locations:
+        filtered_df = filtered_df[
+            filtered_df['Normalized_Categories'].apply(lambda cats: all(loc in cats for loc in selected_locations))
+        ]
+
+    # Combined search filter
+    if combined_search:
+        search_query = combined_search.lower()
+        filtered_df = filtered_df[
+            filtered_df['Keywords'].str.lower().str.contains(search_query, na=False) |
+            filtered_df['Description'].str.lower().str.contains(search_query, na=False) |
+            filtered_df['Title'].str.lower().str.contains(search_query, na=False)
+        ]
+
+    # Sort by publication date
+    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
+
+    # Display the number of articles found
+    st.subheader(f"🔍 Number of articles found: {len(filtered_df)}")
+
+    # Display the DataFrame
+    st.dataframe(filtered_df)
+
+    # Download filtered articles as CSV
+    if not filtered_df.empty:
+        csv = filtered_df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">📥 Download CSV</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
+    # Visual Insights
+    st.subheader("📊 Visual Insights")
+
+    # Bar chart for Top 25 General Categories
+    top_25_categories = general_category_counts.head(25)
+    if not top_25_categories.empty:
+        st.markdown("**Top 25 Categories by Number of Articles**")
+        category_df = top_25_categories.rename_axis('Category').reset_index(name='Count')
+        category_chart = pd.DataFrame(category_df.set_index('Category')['Count'])
+        st.bar_chart(category_chart)
+    else:
+        st.write("No category data available for visualization.")
+
+    # Bar chart for Articles Published Each Hour
+    if not filtered_df.empty:
+        filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
+        articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
+        st.markdown("**Number of Articles Published Each Hour**")
+        st.bar_chart(articles_per_hour)
+    else:
+        st.write("No publication date data available for visualization.")
+
+    # Distribution of Feeds
+    feed_counts = filtered_df['Feed'].value_counts()
+    if not feed_counts.empty:
+        st.markdown("**Distribution of Feeds**")
+        st.write(feed_counts)
+    else:
+        st.write("No feed distribution data available.")
+
+if __name__ == "__main__":
+    main()
