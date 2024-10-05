@@ -293,8 +293,8 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Description': article['description'],
                     'Keywords': ', '.join(article['keywords']),
                     'Publication_Date': article['publication_date'],
-                    'Categories': ', '.join(categories),
-                    'Normalized_Categories': normalized_categories  # Changed to list for easier manipulation
+                    'Categories': categories,  # Stored as list
+                    'Normalized_Categories': normalized_categories  # Stored as list
                 })
         else:
             sitemap_entries = extract_urls_from_sitemap(feed_url)
@@ -308,8 +308,8 @@ def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
                     'Description': '',
                     'Keywords': ', '.join(entry['keywords']),
                     'Publication_Date': entry['publication_date'],
-                    'Categories': ', '.join(categories),
-                    'Normalized_Categories': normalized_categories  # Changed to list for easier manipulation
+                    'Categories': categories,  # Stored as list
+                    'Normalized_Categories': normalized_categories  # Stored as list
                 })
 
     df = pd.DataFrame(all_articles)
@@ -331,15 +331,6 @@ def main():
             st.write(message)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Count categories and locations based on the entire dataset initially
-    category_counts = df['Normalized_Categories'].explode().value_counts()
-    location_counts = category_counts[category_counts.index.isin(REGIONAL_LOCATIONS)]
-    general_category_counts = category_counts[~category_counts.index.isin(REGIONAL_LOCATIONS)]
-
-    # Prepare filter options with counts
-    category_options = [f"{cat} ({count})" for cat, count in general_category_counts.items()]
-    location_options = [f"{loc} ({count})" for loc, count in location_counts.items()]
-
     # Initialize Session State for filters to retain selections
     if 'filter_logic' not in st.session_state:
         st.session_state.filter_logic = 'AND'
@@ -357,9 +348,9 @@ def main():
     st.sidebar.title("🔍 Filters")
 
     # Arrange Filter Logic and Search Input on the Same Line
-    filter_logic, combined_search = st.sidebar.columns([1, 3])
+    filter_logic_col, search_col = st.sidebar.columns([1, 3])
 
-    with filter_logic:
+    with filter_logic_col:
         st.session_state.filter_logic = st.radio(
             'Category Filter Logic:',
             options=['AND', 'OR'],
@@ -367,17 +358,49 @@ def main():
             key='filter_logic_radio'
         )
 
-    with combined_search:
+    with search_col:
         st.session_state.combined_search = st.text_input(
             'Search by Title or Keywords:',
             value=st.session_state.combined_search,
             key='combined_search_input'
         )
 
-    # Dynamic Filter Options Based on Current Selections
-    # To achieve this, we'll apply filters in steps and update available options accordingly
+    # Apply initial filters: Search and Filter Logic
+    filtered_df_initial = df.copy()
 
-    # Extract selections from multiselects
+    # Apply combined search
+    if st.session_state.combined_search:
+        search_query = st.session_state.combined_search.lower()
+        filtered_df_initial = filtered_df_initial[
+            filtered_df_initial['Keywords'].str.lower().str.contains(search_query, na=False) |
+            filtered_df_initial['Description'].str.lower().str.contains(search_query, na=False) |
+            filtered_df_initial['Title'].str.lower().str.contains(search_query, na=False)
+        ]
+
+    # Apply filter logic (AND/OR) to Categories and Locations
+    # Since category and location filters are yet to be selected, this step will be adjusted
+    # We'll compute available categories and locations based on the search filter only
+
+    # Extract available categories and locations from the search-filtered data
+    available_categories = (
+        filtered_df_initial['Normalized_Categories']
+        .explode()
+        .value_counts()
+        .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
+    )
+
+    available_locations = (
+        filtered_df_initial['Normalized_Categories']
+        .explode()
+        .value_counts()
+        .loc[lambda x: x.index.isin(REGIONAL_LOCATIONS)]
+    )
+
+    # Prepare filter options with counts
+    category_options = [f"{cat} ({count})" for cat, count in available_categories.items()]
+    location_options = [f"{loc} ({count})" for loc, count in available_locations.items()]
+
+    # Present Category and Location Multiselects with available options
     selected_categories = st.sidebar.multiselect(
         'Select Categories:',
         options=category_options,
@@ -400,62 +423,45 @@ def main():
     selected_categories_clean = [cat.split(' (')[0] for cat in selected_categories]
     selected_locations_clean = [loc.split(' (')[0] for loc in selected_locations]
 
-    # Apply filters
-    filtered_df = df.copy()
+    # Apply category and location filters
+    filtered_df_final = filtered_df_initial.copy()
 
     if selected_categories_clean or selected_locations_clean:
         if st.session_state.filter_logic == 'OR':
-            filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda cats: any(cat in cats for cat in selected_categories_clean)) |
-                filtered_df['Normalized_Categories'].apply(lambda locs: any(loc in locs for loc in selected_locations_clean))
-            ]
+            condition = pd.Series([False] * len(filtered_df_final))
+            if selected_categories_clean:
+                condition = condition | filtered_df_final['Normalized_Categories'].apply(
+                    lambda cats: any(cat in cats for cat in selected_categories_clean)
+                )
+            if selected_locations_clean:
+                condition = condition | filtered_df_final['Normalized_Categories'].apply(
+                    lambda locs: any(loc in locs for loc in selected_locations_clean)
+                )
+            filtered_df_final = filtered_df_final[condition]
         elif st.session_state.filter_logic == 'AND':
             if selected_categories_clean:
                 for cat in selected_categories_clean:
-                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda cats: cat in cats)]
+                    filtered_df_final = filtered_df_final[
+                        filtered_df_final['Normalized_Categories'].apply(lambda cats: cat in cats)
+                    ]
             if selected_locations_clean:
                 for loc in selected_locations_clean:
-                    filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda locs: loc in locs)]
-
-    # Combined search filter
-    if st.session_state.combined_search:
-        search_query = st.session_state.combined_search.lower()
-        filtered_df = filtered_df[
-            filtered_df['Keywords'].str.lower().str.contains(search_query, na=False) |
-            filtered_df['Description'].str.lower().str.contains(search_query, na=False) |
-            filtered_df['Title'].str.lower().str.contains(search_query, na=False)
-        ]
-
-    # Update available categories and locations based on the filtered data
-    updated_category_counts = filtered_df['Normalized_Categories'].explode().value_counts()
-    updated_location_counts = updated_category_counts[updated_category_counts.index.isin(REGIONAL_LOCATIONS)]
-    updated_general_category_counts = updated_category_counts[~updated_category_counts.index.isin(REGIONAL_LOCATIONS)]
-
-    # Prepare updated filter options with counts
-    updated_category_options = [f"{cat} ({count})" for cat, count in updated_general_category_counts.items()]
-    updated_location_options = [f"{loc} ({count})" for loc, count in updated_location_counts.items()]
-
-    # Update the multiselect options
-    # Note: Streamlit does not support dynamically updating multiselect options based on selections directly.
-    # As a workaround, we can display the updated counts below or encourage users to reset filters if needed.
-    st.sidebar.markdown("### Available Categories:")
-    st.sidebar.write(updated_category_options if updated_category_options else "No categories available.")
-
-    st.sidebar.markdown("### Available Regional Locations:")
-    st.sidebar.write(updated_location_options if updated_location_options else "No locations available.")
+                    filtered_df_final = filtered_df_final[
+                        filtered_df_final['Normalized_Categories'].apply(lambda locs: loc in locs)
+                    ]
 
     # Sort the DataFrame by the newest publication date
-    filtered_df = filtered_df.sort_values(by='Publication_Date', ascending=False)
+    filtered_df_final = filtered_df_final.sort_values(by='Publication_Date', ascending=False)
 
     # Display the number of articles found
-    st.subheader(f"🔍 Number of articles found: {len(filtered_df)}")
+    st.subheader(f"🔍 Number of articles found: {len(filtered_df_final)}")
 
     # Display the DataFrame
-    st.dataframe(filtered_df)
+    st.dataframe(filtered_df_final)
 
     # Download filtered articles as CSV
-    if not filtered_df.empty:
-        csv = filtered_df.to_csv(index=False)
+    if not filtered_df_final.empty:
+        csv = filtered_df_final.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
         href = f'<a href="data:file/csv;base64,{b64}" download="filtered_articles.csv">📥 Download CSV</a>'
         st.markdown(href, unsafe_allow_html=True)
@@ -464,7 +470,13 @@ def main():
     st.subheader("📊 Visual Insights")
 
     # Bar chart for Top 25 General Categories
-    top_25_categories = updated_general_category_counts.head(25)
+    top_25_categories = (
+        filtered_df_final['Normalized_Categories']
+        .explode()
+        .value_counts()
+        .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
+        .head(25)
+    )
     if not top_25_categories.empty:
         st.markdown("**Top 25 Categories by Number of Articles**")
         category_df = top_25_categories.rename_axis('Category').reset_index(name='Count')
@@ -474,16 +486,16 @@ def main():
         st.write("No category data available for visualization.")
 
     # Bar chart for Articles Published Each Hour
-    if not filtered_df.empty and filtered_df['Publication_Date'].notna().any():
-        filtered_df['Hour'] = filtered_df['Publication_Date'].dt.hour
-        articles_per_hour = filtered_df['Hour'].value_counts().sort_index()
+    if not filtered_df_final.empty and filtered_df_final['Publication_Date'].notna().any():
+        filtered_df_final['Hour'] = filtered_df_final['Publication_Date'].dt.hour
+        articles_per_hour = filtered_df_final['Hour'].value_counts().sort_index()
         st.markdown("**Number of Articles Published Each Hour**")
         st.bar_chart(articles_per_hour)
     else:
         st.write("No publication date data available for visualization.")
 
     # Distribution of Feeds
-    feed_counts = filtered_df['Feed'].value_counts()
+    feed_counts = filtered_df_final['Feed'].value_counts()
     if not feed_counts.empty:
         st.markdown("**Distribution of Feeds**")
         st.write(feed_counts)
