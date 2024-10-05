@@ -117,6 +117,41 @@ def extract_categories(url):
         st.error(f"Error parsing URL {url}: {e}")
         return []
 
+@st.cache_data(ttl=3600)
+def get_all_articles():
+    all_articles = []
+    log_messages = []
+    for feed_name, feed_url in feeds.items():
+        feed_type = determine_feed_type(feed_url)
+        log_message = f"Processing '{feed_name}' as {feed_type.upper()}..."
+        log_messages.append(log_message)
+        
+        if feed_type == 'rss':
+            articles = extract_urls_from_rss(feed_url)
+            for article in articles:
+                all_articles.append({
+                    'Feed': feed_name,
+                    'URL': article['link'],
+                    'Title': article['title'],
+                    'Description': article['description'],
+                    'Keywords': ', '.join(article['keywords']),
+                    'Publication_Date': article['publication_date'],
+                    'Categories': normalize_categories(extract_categories(article['link']))
+                })
+        else:
+            sitemap_entries = extract_urls_from_sitemap(feed_url)
+            for entry in sitemap_entries:
+                all_articles.append({
+                    'Feed': feed_name,
+                    'URL': entry['loc'],
+                    'Title': entry['news_title'],
+                    'Description': '',
+                    'Keywords': ', '.join(entry['keywords']),
+                    'Publication_Date': entry['publication_date'],
+                    'Categories': normalize_categories(extract_categories(entry['loc']))
+                })
+    return pd.DataFrame(all_articles), log_messages
+
 # Define German states and the 10 biggest cities globally
 states_of_germany = [
     'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
@@ -154,10 +189,11 @@ def normalize_categories(categories, url):
         else:
             normalized.add(cat_lower)
 
-    # Step 2: Extract specific regional locations from URL and keywords
+    # Step 2: Extract specific regional locations from URL and keywords (use exact match)
     url_path = urlparse(url).path.lower()
     for region in regional_locations:
-        if region in url_path or any(re.search(rf'\b{region}\b', cat.lower()) for cat in categories):
+        # Ensure an exact match for the region, avoiding partial matches
+        if re.search(rf'\b{region}\b', url_path) or any(re.search(rf'\b{region}\b', cat.lower()) for cat in categories):
             specific_regions.add(region)
 
     # Step 3: Add specific regional locations to normalized categories if found
@@ -167,41 +203,6 @@ def normalize_categories(categories, url):
         normalized.discard("regional")
 
     return list(normalized)
-
-@st.cache_data(ttl=3600)
-def get_all_articles():
-    all_articles = []
-    log_messages = []
-    for feed_name, feed_url in feeds.items():
-        feed_type = determine_feed_type(feed_url)
-        log_message = f"Processing '{feed_name}' as {feed_type.upper()}..."
-        log_messages.append(log_message)
-        
-        if feed_type == 'rss':
-            articles = extract_urls_from_rss(feed_url)
-            for article in articles:
-                all_articles.append({
-                    'Feed': feed_name,
-                    'URL': article['link'],
-                    'Title': article['title'],
-                    'Description': article['description'],
-                    'Keywords': ', '.join(article['keywords']),
-                    'Publication_Date': article['publication_date'],
-                    'Categories': normalize_categories(extract_categories(article['link']))
-                })
-        else:
-            sitemap_entries = extract_urls_from_sitemap(feed_url)
-            for entry in sitemap_entries:
-                all_articles.append({
-                    'Feed': feed_name,
-                    'URL': entry['loc'],
-                    'Title': entry['news_title'],
-                    'Description': '',
-                    'Keywords': ', '.join(entry['keywords']),
-                    'Publication_Date': entry['publication_date'],
-                    'Categories': normalize_categories(extract_categories(entry['loc']))
-                })
-    return pd.DataFrame(all_articles), log_messages
 
 def main():
     st.title('News Feed Aggregator')
@@ -245,14 +246,20 @@ def main():
     if category_filter or location_filter:
         if category_logic == 'OR':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: any(cat == entry for entry in x for cat in category_filter)) |
-                filtered_df['Normalized_Categories'].apply(lambda x: any(loc == entry for entry in x for loc in location_filter))
+                filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter)) |
+                filtered_df['Normalized_Categories'].apply(lambda x: any(loc in x for loc in location_filter))
             ]
         elif category_logic == 'AND':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: all(cat == entry for entry in x for cat in category_filter)) &
-                filtered_df['Normalized_Categories'].apply(lambda x: all(loc == entry for entry in x for loc in location_filter))
+                filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter)) &
+                filtered_df['Normalized_Categories'].apply(lambda x: all(loc in x for loc in location_filter))
             ]
+
+    # Exact match for location filters to prevent partial matches
+    if location_filter:
+        filtered_df = filtered_df[
+            filtered_df['Normalized_Categories'].apply(lambda x: all(loc in x for loc in location_filter))
+        ]
 
     if combined_search:
         combined_search = combined_search.lower()
