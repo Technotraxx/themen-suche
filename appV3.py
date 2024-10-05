@@ -79,18 +79,25 @@ def main():
     category_options = [f"{cat} ({count})" for cat, count in available_categories.items()]
     location_options = [f"{loc} ({count})" for loc, count in available_locations.items()]
 
-    # Retrieve previous selections to prevent them from vanishing
+    # Retrieve previous selections and filter them to ensure they are still valid
+    previous_selected_categories = st.session_state.get('selected_categories', [])
+    selected_categories = [cat for cat in previous_selected_categories if cat in category_options]
+
+    previous_selected_locations = st.session_state.get('selected_locations', [])
+    selected_locations = [loc for loc in previous_selected_locations if loc in location_options]
+
+    # Sidebar: Multiselects for categories and locations
     selected_categories = st.sidebar.multiselect(
         'Select Categories:',
         options=category_options,
-        default=st.session_state.get('selected_categories', []),
+        default=selected_categories,
         key='category_multiselect'
     )
 
     selected_locations = st.sidebar.multiselect(
         'Select Regional Locations:',
         options=location_options,
-        default=st.session_state.get('selected_locations', []),
+        default=selected_locations,
         key='location_multiselect'
     )
 
