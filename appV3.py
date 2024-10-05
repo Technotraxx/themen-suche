@@ -412,26 +412,6 @@ def main():
         if loc not in available_locations.index:
             location_options.append(f"{loc} (0)")
 
-    # Recreate the multiselects with updated options including selected items
-    # This prevents selected items from vanishing
-    selected_categories = st.sidebar.multiselect(
-        'Select Categories:',
-        options=category_options,
-        default=selected_categories,
-        key='category_multiselect_updated'
-    )
-
-    selected_locations = st.sidebar.multiselect(
-        'Select Regional Locations:',
-        options=location_options,
-        default=selected_locations,
-        key='location_multiselect_updated'
-    )
-
-    # Extract actual category and location names from updated selections
-    selected_categories_clean = [cat.split(' (')[0] for cat in selected_categories]
-    selected_locations_clean = [loc.split(' (')[0] for loc in selected_locations]
-
     # Apply category and location filters
     filtered_df_final = filtered_df.copy()
 
