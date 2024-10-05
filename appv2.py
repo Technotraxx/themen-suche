@@ -117,21 +117,21 @@ def extract_categories(url):
         st.error(f"Error parsing URL {url}: {e}")
         return []
 
+# Define German states and the 10 biggest cities globally
+states_of_germany = [
+    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+]
+
+biggest_cities_germany = [
+    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+    'essen', 'duesseldorf', 'bremen'
+]
+
+regional_locations = states_of_germany + biggest_cities_germany
+
 def normalize_categories(categories):
-    # Define German states and the 10 biggest cities (available globally)
-    states_of_germany = [
-        'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
-        'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
-        'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
-    ]
-
-    biggest_cities_germany = [
-        'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
-        'essen', 'duesseldorf', 'bremen'
-    ]
-
-    regional_locations = states_of_germany + biggest_cities_germany
-
     normalization_rules = {
         'wirtschaft': ['economy', 'wirtschaft'],
         'politik': ['politics', 'politik'],
@@ -219,7 +219,7 @@ def main():
 
     # Prepare category and location options with counts for sidebar dropdowns
     category_options = [f"{cat} ({count})" for cat, count in category_counts.items()]
-    location_options = [f"{loc} ({count})" for loc, count in location_counts.items() if loc in states_of_germany + biggest_cities_germany]
+    location_options = [f"{loc} ({count})" for loc, count in location_counts.items() if loc in regional_locations]
 
     # Sidebar: Filters
     st.sidebar.title("Filters")
@@ -281,5 +281,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
