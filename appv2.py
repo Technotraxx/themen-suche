@@ -117,21 +117,21 @@ def extract_categories(url):
         st.error(f"Error parsing URL {url}: {e}")
         return []
 
-def normalize_categories(categories):
-    # Define German states and the 10 biggest cities globally
-    states_of_germany = [
-        'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
-        'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
-        'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
-    ]
+# Define German states and the 10 biggest cities globally
+states_of_germany = [
+    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+]
 
-    biggest_cities_germany = [
-        'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
-        'essen', 'duesseldorf', 'bremen'
-    ]
+biggest_cities_germany = [
+    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+    'essen', 'duesseldorf', 'bremen'
+]
 
-    regional_locations = states_of_germany + biggest_cities_germany
+regional_locations = states_of_germany + biggest_cities_germany
 
+def normalize_categories(categories, url):
     normalization_rules = {
         'wirtschaft': ['economy', 'wirtschaft'],
         'politik': ['politics', 'politik'],
@@ -140,9 +140,11 @@ def normalize_categories(categories):
         'regional': ['region', 'regionales', 'regional']
     }
 
+    # Initialize sets for normalized categories
     normalized = set()
+    specific_regions = set()
     
-    # Step 1: Normalize general categories, including "regional"
+    # Step 1: Normalize general categories
     for cat in categories:
         cat_lower = cat.lower()
         for key, synonyms in normalization_rules.items():
@@ -152,16 +154,17 @@ def normalize_categories(categories):
         else:
             normalized.add(cat_lower)
 
-    # Step 2: Add specific regional locations (states and cities), but avoid adding them under "regional"
-    for cat in categories:
-        cat_lower = cat.lower()
-        for region in regional_locations:
-            if region in cat_lower and region not in normalized:
-                normalized.add(region)
-                # Remove "regional" if it's redundant and a specific region is found
-                if "regional" in normalized:
-                    normalized.remove("regional")
-                break
+    # Step 2: Extract specific regional locations from URL and keywords
+    url_path = urlparse(url).path.lower()
+    for region in regional_locations:
+        if region in url_path or any(re.search(rf'\b{region}\b', cat.lower()) for cat in categories):
+            specific_regions.add(region)
+
+    # Step 3: Add specific regional locations to normalized categories if found
+    if specific_regions:
+        normalized.update(specific_regions)
+        # Remove "regional" if specific regions are identified to avoid redundancy
+        normalized.discard("regional")
 
     return list(normalized)
 
@@ -214,18 +217,22 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Normalize categories in the DataFrame
-    df['Normalized_Categories'] = df['Categories'].apply(normalize_categories)
+    df['Normalized_Categories'] = df.apply(lambda row: normalize_categories(row['Categories'], row['URL']), axis=1)
 
-    # Extract category counts for sidebar dropdowns
+    # Extract counts for general categories and specific regions separately
     category_counts = df['Normalized_Categories'].explode().value_counts()
+    location_counts = category_counts[category_counts.index.isin(regional_locations)]
+    general_category_counts = category_counts[~category_counts.index.isin(regional_locations)]
 
     # Prepare category options with counts for sidebar dropdowns
-    category_options = [f"{cat} ({count})" for cat, count in category_counts.items()]
+    category_options = [f"{cat} ({count})" for cat, count in general_category_counts.items()]
+    location_options = [f"{loc} ({count})" for loc, count in location_counts.items()]
 
     # Sidebar: Filters
     st.sidebar.title("Filters")
     combined_search = st.sidebar.text_input('Search by Title or Keywords:')
     category_filter = st.sidebar.multiselect('Select Categories:', options=category_options, default=[])
+    location_filter = st.sidebar.multiselect('Select Regional Locations (States and Cities):', options=location_options, default=[])
     category_logic = st.sidebar.radio('Category Filter Logic:', options=['OR', 'AND'], index=0)
 
     # Apply filters
@@ -233,12 +240,19 @@ def main():
 
     # Extract actual category names from selected items (since they include counts)
     category_filter = [cat.split(' (')[0] for cat in category_filter]
+    location_filter = [loc.split(' (')[0] for loc in location_filter]
 
-    if category_filter:
+    if category_filter or location_filter:
         if category_logic == 'OR':
-            filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter))]
+            filtered_df = filtered_df[
+                filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter)) |
+                filtered_df['Normalized_Categories'].apply(lambda x: any(loc in x for loc in location_filter))
+            ]
         elif category_logic == 'AND':
-            filtered_df = filtered_df[filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter))]
+            filtered_df = filtered_df[
+                filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter)) &
+                filtered_df['Normalized_Categories'].apply(lambda x: all(loc in x for loc in location_filter))
+            ]
 
     if combined_search:
         combined_search = combined_search.lower()
@@ -265,7 +279,7 @@ def main():
     # Add charts to visualize the data
     st.subheader("Visual Insights")
     # Bar chart for the Top 25 Categories by number of articles (sorted highest to lowest)
-    top_25_categories = category_counts[:25]
+    top_25_categories = general_category_counts[:25]
     st.bar_chart(pd.DataFrame({'Categories': top_25_categories.index, 'Count': top_25_categories.values}).set_index('Categories'))
 
     # Bar chart showing the number of articles published during each hour of the day
