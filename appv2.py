@@ -117,46 +117,53 @@ def extract_categories(url):
         st.error(f"Error parsing URL {url}: {e}")
         return []
 
-# Extend normalization for regional categories with specific counties and states
-regional_locations = [
-    'hessen', 'luebeck', 'muenchen', 'leipzig', 'berlin', 'berlin-brandenburg',
-    'sachsen', 'nordrhein-westfalen', 'nrw', 'essen', 'schleswig-holstein', 'hamburg',
-    'rostock', 'mecklenburg-vorpommern', 'baden-wuerttemberg', 'koeln', 'thueringen',
-    'braunschweig', 'niedersachsen', 'bremen', 'nuernberg', 'bayern'
-]
-
-# Define German states and the 10 biggest cities (move these to the global scope)
-states_of_germany = [
-    'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
-    'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
-    'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
-]
-
-biggest_cities_germany = [
-    'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
-    'essen', 'duesseldorf', 'bremen'
-]
-
 def normalize_categories(categories):
-    # Normalization rules
+    # Define German states and the 10 biggest cities (available globally)
+    states_of_germany = [
+        'baden-wuerttemberg', 'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hessen',
+        'mecklenburg-vorpommern', 'niedersachsen', 'nordrhein-westfalen', 'rheinland-pfalz',
+        'saarland', 'sachsen', 'sachsen-anhalt', 'schleswig-holstein', 'thueringen'
+    ]
+
+    biggest_cities_germany = [
+        'berlin', 'hamburg', 'muenchen', 'koeln', 'frankfurt', 'stuttgart', 'dortmund',
+        'essen', 'duesseldorf', 'bremen'
+    ]
+
+    regional_locations = states_of_germany + biggest_cities_germany
+
     normalization_rules = {
-        'regional': ['region', 'regionales', 'regional'] + regional_locations,
         'wirtschaft': ['economy', 'wirtschaft'],
         'politik': ['politics', 'politik'],
         'ausland': ['international', 'ausland'],
-        'sport': ['sports', 'sport']
+        'sport': ['sports', 'sport'],
+        'regional': ['region', 'regionales', 'regional'] + regional_locations
     }
-    normalized = []
+
+    normalized = set()
     for cat in categories:
         found = False
-        for key, synonyms in normalization_rules.items():
-            if cat.lower() in [syn.lower() for syn in synonyms]:
-                normalized.append(key)
+        cat_lower = cat.lower()
+        
+        # Check for specific regional locations first
+        for region in regional_locations:
+            if region in cat_lower:
+                normalized.add('regional')
+                normalized.add(region)
                 found = True
                 break
+        
+        # If no specific regional location found, apply general normalization rules
         if not found:
-            normalized.append(cat.lower())
-    return normalized
+            for key, synonyms in normalization_rules.items():
+                if cat_lower in [syn.lower() for syn in synonyms]:
+                    normalized.add(key)
+                    found = True
+                    break
+            if not found:
+                normalized.add(cat_lower)
+
+    return list(normalized)
 
 @st.cache_data(ttl=3600)
 def get_all_articles():
