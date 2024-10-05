@@ -202,10 +202,16 @@ def normalize_categories(categories, url):
     # Step 2: Extract specific regional locations from URL and keywords (use exact match, prioritize compound regions)
     url_path = urlparse(url).path.lower()
 
-    for region in regional_locations:
-        # Ensure an exact match for the region, avoiding partial matches
+    # Match compound regions first to prevent partial matches
+    for region in compound_regions:
         if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
             specific_regions.add(region)
+
+    # Match other regional locations only if they haven't been matched as part of a compound region
+    for region in states_of_germany + biggest_cities_germany:
+        if region not in specific_regions:  # Only add if not already matched
+            if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
+                specific_regions.add(region)
 
     # Step 3: Add specific regional locations to normalized categories if found
     if specific_regions:
@@ -313,4 +319,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
