@@ -245,13 +245,13 @@ def main():
     if category_filter or location_filter:
         if category_logic == 'OR':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: any(cat in x for cat in category_filter)) |
-                filtered_df['Normalized_Categories'].apply(lambda x: any(loc in x for loc in location_filter))
+                filtered_df['Normalized_Categories'].apply(lambda x: any(cat == entry for entry in x for cat in category_filter)) |
+                filtered_df['Normalized_Categories'].apply(lambda x: any(loc == entry for entry in x for loc in location_filter))
             ]
         elif category_logic == 'AND':
             filtered_df = filtered_df[
-                filtered_df['Normalized_Categories'].apply(lambda x: all(cat in x for cat in category_filter)) &
-                filtered_df['Normalized_Categories'].apply(lambda x: all(loc in x for loc in location_filter))
+                filtered_df['Normalized_Categories'].apply(lambda x: all(cat == entry for entry in x for cat in category_filter)) &
+                filtered_df['Normalized_Categories'].apply(lambda x: all(loc == entry for entry in x for loc in location_filter))
             ]
 
     if combined_search:
