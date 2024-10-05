@@ -365,6 +365,7 @@ def main():
     available_categories = (
         filtered_df['Normalized_Categories']
         .explode()
+        .dropna()
         .value_counts()
         .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
     )
@@ -372,6 +373,7 @@ def main():
     available_locations = (
         filtered_df['Normalized_Categories']
         .explode()
+        .dropna()
         .value_counts()
         .loc[lambda x: x.index.isin(REGIONAL_LOCATIONS)]
     )
@@ -403,27 +405,18 @@ def main():
     selected_categories_clean = [cat.split(' (')[0] for cat in selected_categories]
     selected_locations_clean = [loc.split(' (')[0] for loc in selected_locations]
 
-    # Ensure selected items are always in the options
-    # Add selected items back to the options if they were filtered out
-    for cat in selected_categories_clean:
-        if cat not in available_categories.index:
-            category_options.append(f"{cat} (0)")
-    for loc in selected_locations_clean:
-        if loc not in available_locations.index:
-            location_options.append(f"{loc} (0)")
-
     # Apply category and location filters
     filtered_df_final = filtered_df.copy()
 
     if selected_categories_clean or selected_locations_clean:
         if filter_logic == 'OR':
-            condition = pd.Series([False] * len(filtered_df_final))
-            if selected_categories_clean:
-                condition = condition | filtered_df_final['Normalized_Categories'].apply(
+            condition = (
+                filtered_df_final['Normalized_Categories'].apply(
                     lambda cats: any(cat in cats for cat in selected_categories_clean)
-                )
+                ) if selected_categories_clean else pd.Series([False] * len(filtered_df_final))
+            )
             if selected_locations_clean:
-                condition = condition | filtered_df_final['Normalized_Categories'].apply(
+                condition |= filtered_df_final['Normalized_Categories'].apply(
                     lambda locs: any(loc in locs for loc in selected_locations_clean)
                 )
             filtered_df_final = filtered_df_final[condition]
@@ -460,6 +453,7 @@ def main():
     top_25_categories = (
         filtered_df_final['Normalized_Categories']
         .explode()
+        .dropna()
         .value_counts()
         .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
         .head(25)
