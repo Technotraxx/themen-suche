@@ -1,7 +1,6 @@
 import base64
 import re
 import xml.etree.ElementTree as ET
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
@@ -332,7 +331,7 @@ def main():
     # Sidebar: Filters
     st.sidebar.title("🔍 Filters")
 
-    # Category Filter Logic
+    # 1. Category Filter Logic
     filter_logic = st.sidebar.radio(
         'Category Filter Logic:',
         options=['AND', 'OR'],
@@ -342,7 +341,7 @@ def main():
 
     st.sidebar.markdown("")  # Space
 
-    # Search by Title or Keywords
+    # 2. Search by Title or Keywords
     combined_search = st.sidebar.text_input(
         'Search by Title or Keywords:',
         value='',
@@ -413,37 +412,25 @@ def main():
         if loc not in available_locations.index:
             location_options.append(f"{loc} (0)")
 
-    # Re-render multiselect with updated options including selected items
+    # Recreate the multiselects with updated options including selected items
     # This prevents selected items from vanishing
-    if selected_categories_clean:
-        st.sidebar.multiselect(
-            'Select Categories:',
-            options=category_options,
-            default=selected_categories,
-            key='category_multiselect_updated'
-        )
-    else:
-        st.sidebar.multiselect(
-            'Select Categories:',
-            options=category_options,
-            default=[],
-            key='category_multiselect_updated'
-        )
+    selected_categories = st.sidebar.multiselect(
+        'Select Categories:',
+        options=category_options,
+        default=selected_categories,
+        key='category_multiselect_updated'
+    )
 
-    if selected_locations_clean:
-        st.sidebar.multiselect(
-            'Select Regional Locations:',
-            options=location_options,
-            default=selected_locations,
-            key='location_multiselect_updated'
-        )
-    else:
-        st.sidebar.multiselect(
-            'Select Regional Locations:',
-            options=location_options,
-            default=[],
-            key='location_multiselect_updated'
-        )
+    selected_locations = st.sidebar.multiselect(
+        'Select Regional Locations:',
+        options=location_options,
+        default=selected_locations,
+        key='location_multiselect_updated'
+    )
+
+    # Extract actual category and location names from updated selections
+    selected_categories_clean = [cat.split(' (')[0] for cat in selected_categories]
+    selected_locations_clean = [loc.split(' (')[0] for loc in selected_locations]
 
     # Apply category and location filters
     filtered_df_final = filtered_df.copy()
