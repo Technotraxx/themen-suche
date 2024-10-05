@@ -164,7 +164,14 @@ biggest_cities_germany = [
     'essen', 'duesseldorf', 'bremen'
 ]
 
-regional_locations = states_of_germany + biggest_cities_germany
+# Prioritize compound regions for exact matching
+compound_regions = [
+    'baden-wuerttemberg', 'mecklenburg-vorpommern', 'nordrhein-westfalen', 
+    'rheinland-pfalz', 'sachsen-anhalt', 'schleswig-holstein'
+]
+
+# Combine lists of locations
+regional_locations = compound_regions + [region for region in states_of_germany if region not in compound_regions] + biggest_cities_germany
 
 def normalize_categories(categories, url):
     normalization_rules = {
@@ -189,11 +196,12 @@ def normalize_categories(categories, url):
         else:
             normalized.add(cat_lower)
 
-    # Step 2: Extract specific regional locations from URL and keywords (use exact match)
+    # Step 2: Extract specific regional locations from URL and keywords (use exact match, prioritize compound regions)
     url_path = urlparse(url).path.lower()
+
     for region in regional_locations:
         # Ensure an exact match for the region, avoiding partial matches
-        if re.search(rf'\b{region}\b', url_path) or any(re.search(rf'\b{region}\b', cat.lower()) for cat in categories):
+        if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
             specific_regions.add(region)
 
     # Step 3: Add specific regional locations to normalized categories if found
@@ -300,5 +308,7 @@ def main():
     st.write("Distribution of Feeds")
     st.write(feed_counts)
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
