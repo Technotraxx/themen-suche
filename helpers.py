@@ -52,7 +52,8 @@ NORMALIZATION_RULES: Dict[str, List[str]] = {
     'politik': ['politics', 'politik'],
     'ausland': ['international', 'ausland'],
     'sport': ['sports', 'sport'],
-    'regional': ['region', 'regionales', 'regional']
+    'regional': ['region', 'regionales', 'regional'],
+    'nordrhein-westfalen': ['nordrhein-westfalen', 'nrw', 'ruhrgebiet']
 }
 
 NON_CATEGORY_PATTERNS: List[str] = [
