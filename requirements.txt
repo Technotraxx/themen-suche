@@ -5,3 +5,7 @@ altair
 feedparser
 lxml
 matplotlib
+networkx 
+pyvis 
+plotly 
+scikit-learn
