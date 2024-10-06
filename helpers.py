@@ -162,8 +162,7 @@ def extract_categories(url: str) -> List[str]:
         print(f"Error parsing URL {url}: {e}")
         return []
 
-
-ddef normalize_categories(categories: List[str], url: str) -> List[str]:
+def normalize_categories(categories: List[str], url: str) -> List[str]:
     normalized: set = set()
     specific_regions: set = set()
 
