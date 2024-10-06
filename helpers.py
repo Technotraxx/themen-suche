@@ -166,7 +166,7 @@ def normalize_categories(categories: List[str], url: str) -> List[str]:
     normalized: set = set()
     specific_regions: set = set()
 
-    # Step 1: Normalize general categories and preserve "regional"
+    # Step 1: Normalize general categories
     for cat in categories:
         cat_lower = cat.lower()
         matched = False
@@ -182,11 +182,11 @@ def normalize_categories(categories: List[str], url: str) -> List[str]:
     url_path = urlparse(url).path.lower()
 
     for region in REGIONAL_LOCATIONS:
-        # Use word boundaries and ensure 'region' is a complete segment
-        if re.search(rf'\b{re.escape(region)}\b', url_path) or any(re.search(rf'\b{re.escape(region)}\b', cat.lower()) for cat in categories):
+        pattern = rf'(?<![\w-]){re.escape(region)}(?![\w-])'
+        if re.search(pattern, url_path) or any(re.search(pattern, cat.lower()) for cat in categories):
             specific_regions.add(region)
 
-    # Step 3: Add specific regional locations to normalized categories without removing "regional"
+    # Step 3: Add all specific regional locations to normalized categories without removing "regional"
     normalized.update(specific_regions)
 
     return list(normalized)
