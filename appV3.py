@@ -97,8 +97,17 @@ def main():
     st.subheader("📊 Topic Map")
     topic_map = create_topic_map(clustered_df)
     st.markdown("**Interactive Topic Map**")
-    topic_map.show("topic_map.html")
-    st.markdown(f'<iframe src="topic_map.html" width="100%" height="750px" frameborder="0"></iframe>', unsafe_allow_html=True)
+    from analytics import perform_topic_clustering, create_topic_map
+    import streamlit.components.v1 as components
+    
+    # Assuming 'create_topic_map' returns a PyVis Network object
+    st.subheader("📊 Topic Map")
+    topic_map = create_topic_map(clustered_df)
+    topic_map.write_html("topic_map.html")
+    
+    with open("topic_map.html", "r", encoding="utf-8") as f:
+        html_content = f.read()
+    components.html(html_content, height=750)
 
     st.subheader("📊 Topic Timeline")
     timeline = create_topic_timeline(clustered_df)
