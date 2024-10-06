@@ -64,16 +64,10 @@ def main():
         .explode()
         .dropna()
         .value_counts()
-        .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
     )
 
-    available_locations = (
-        filtered_df['Normalized_Categories']
-        .explode()
-        .dropna()
-        .value_counts()
-        .loc[lambda x: x.index.isin(REGIONAL_LOCATIONS)]
-    )
+    available_locations = available_categories.loc[lambda x: x.index.isin(REGIONAL_LOCATIONS)]
+    available_categories = available_categories.loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
 
     # Prepare filter options with counts
     category_options = [f"{cat} ({count})" for cat, count in available_categories.items()]
@@ -159,7 +153,6 @@ def main():
         .explode()
         .dropna()
         .value_counts()
-        .loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
         .head(25)
     )
     if not top_25_categories.empty:
