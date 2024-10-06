@@ -2,22 +2,16 @@ import pandas as pd
 import networkx as nx
 from pyvis.network import Network
 import plotly.graph_objects as go
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.decomposition import LatentDirichletAllocation
 import streamlit as st
 
 @st.cache_data(ttl=3600)
 def perform_topic_clustering(df: pd.DataFrame, n_topics: int = 5) -> pd.DataFrame:
     """
     Perform topic clustering on articles using LDA.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing article data.
-        n_topics (int): Number of topics to cluster.
-
-    Returns:
-        pd.DataFrame: DataFrame with topic labels.
     """
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.decomposition import LatentDirichletAllocation
+
     vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
     tfidf_matrix = vectorizer.fit_transform(df['Title'] + " " + df['Keywords'])
     lda = LatentDirichletAllocation(n_components=n_topics, random_state=42)
