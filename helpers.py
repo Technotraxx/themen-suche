@@ -2,15 +2,13 @@ import base64
 import pandas as pd
 import streamlit as st
 from streamlit.runtime.caching import cache_data
-from helpers import (determine_feed_type, extract_urls_from_rss, extract_urls_from_sitemap,
-                     parse_datetime, parse_iso_datetime, extract_categories, normalize_categories, get_all_articles,
-                     REGIONAL_LOCATIONS)
+import helpers
 
 # ----------------------------- Main Application ----------------------------- #
 
 @st.cache_data(ttl=3600)
 def cached_get_all_articles():
-    return get_all_articles()
+    return helpers.get_all_articles()
 
 def main():
     st.set_page_config(page_title='📰 News Feed Aggregator', layout='wide')
@@ -64,8 +62,8 @@ def main():
         filtered_df['Normalized_Categories'].explode().dropna().value_counts()
     ).sort_values(ascending=False)
 
-    available_locations = available_categories.loc[lambda x: x.index.isin(REGIONAL_LOCATIONS)]
-    available_categories = available_categories.loc[lambda x: ~x.index.isin(REGIONAL_LOCATIONS)]
+    available_locations = available_categories.loc[lambda x: x.index.isin(helpers.REGIONAL_LOCATIONS)]
+    available_categories = available_categories.loc[lambda x: ~x.index.isin(helpers.REGIONAL_LOCATIONS)]
 
     # Prepare filter options with counts
     category_options = [f"{cat} ({count})" for cat, count in available_categories.items()]
