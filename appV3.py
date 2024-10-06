@@ -191,12 +191,15 @@ def main():
 
     # Topic Map Visualization
     st.subheader("📊 Topic Map")
-    filtered_df_final = filtered_df_final.dropna(subset=['Title', 'Topic'])
-    topic_map = create_topic_map(filtered_df_final)
-    topic_map.write_html("topic_map.html")
-    with open("topic_map.html", "r", encoding="utf-8") as f:
-        html_content = f.read()
-    components.html(html_content, height=750)
+    if 'Topic' in filtered_df_final.columns:
+        filtered_df_final = filtered_df_final.dropna(subset=['Title', 'Topic'])
+        topic_map = create_topic_map(filtered_df_final)
+        topic_map.write_html("topic_map.html")
+        with open("topic_map.html", "r", encoding="utf-8") as f:
+            html_content = f.read()
+        components.html(html_content, height=750)
+    else:
+        st.write("No topic data available for visualization.")
 
 if __name__ == "__main__":
     main()
