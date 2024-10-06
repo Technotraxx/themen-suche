@@ -164,9 +164,8 @@ def extract_categories(url: str) -> List[str]:
 
 def normalize_categories(categories: List[str], url: str) -> List[str]:
     normalized: set = set()
-    specific_regions: set = set()
 
-    # Step 1: Normalize general categories
+    # Step 1: Normalize general categories without dropping regional
     for cat in categories:
         cat_lower = cat.lower()
         matched = False
@@ -182,15 +181,16 @@ def normalize_categories(categories: List[str], url: str) -> List[str]:
     url_path = urlparse(url).path.lower()
 
     for region in REGIONAL_LOCATIONS:
+        # Ensure 'region' is a complete segment to prevent partial matches
         pattern = rf'(?<![\w-]){re.escape(region)}(?![\w-])'
         if re.search(pattern, url_path) or any(re.search(pattern, cat.lower()) for cat in categories):
-            specific_regions.add(region)
+            normalized.add(region)
 
-    # Step 3: Add all specific regional locations to normalized categories without removing "regional"
-    normalized.update(specific_regions)
+    # Step 3: Retain "regional" if it exists alongside other categories
+    if "regional" in categories or "regionales" in categories:
+        normalized.add("regional")
 
     return list(normalized)
-
 
 @st.cache_data(ttl=3600)
 def get_all_articles() -> Tuple[pd.DataFrame, List[str]]:
