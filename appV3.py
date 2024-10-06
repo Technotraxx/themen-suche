@@ -5,8 +5,6 @@ from streamlit.runtime.caching import cache_data
 from helpers import (determine_feed_type, extract_urls_from_rss, extract_urls_from_sitemap,
                      parse_datetime, parse_iso_datetime, extract_categories, normalize_categories, get_all_articles,
                      REGIONAL_LOCATIONS)
-import streamlit.components.v1 as components
-from analytics import perform_topic_clustering, create_topic_map
 
 # ----------------------------- Main Application ----------------------------- #
 
@@ -188,18 +186,6 @@ def main():
         st.write(feed_counts)
     else:
         st.write("No feed distribution data available.")
-
-    # Topic Map Visualization
-    st.subheader("📊 Topic Map")
-    if 'Topic' in filtered_df_final.columns:
-        filtered_df_final = filtered_df_final.dropna(subset=['Title', 'Topic'])
-        topic_map = create_topic_map(filtered_df_final)
-        topic_map.write_html("topic_map.html")
-        with open("topic_map.html", "r", encoding="utf-8") as f:
-            html_content = f.read()
-        components.html(html_content, height=750)
-    else:
-        st.write("No topic data available for visualization.")
 
 if __name__ == "__main__":
     main()
