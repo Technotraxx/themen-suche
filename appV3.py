@@ -191,6 +191,7 @@ def main():
 
     # Topic Map Visualization
     st.subheader("📊 Topic Map")
+    filtered_df_final = filtered_df_final.dropna(subset=['Title', 'Topic'])
     topic_map = create_topic_map(filtered_df_final)
     topic_map.write_html("topic_map.html")
     with open("topic_map.html", "r", encoding="utf-8") as f:
